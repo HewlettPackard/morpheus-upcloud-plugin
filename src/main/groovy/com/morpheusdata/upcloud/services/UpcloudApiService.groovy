@@ -3,6 +3,7 @@ package com.morpheusdata.upcloud.services
 import com.morpheusdata.upcloud.*
 import com.morpheusdata.core.util.*
 import com.morpheusdata.upcloud.util.*
+import com.morpheusdata.core.util.HttpApiClient.RequestOptions
 import groovy.json.JsonOutput
 import groovy.util.logging.Commons
 import org.apache.http.*
@@ -318,6 +319,153 @@ class UpcloudApiService {
         return rtn
     }
 
+    static waitForServerExists(Map authConfig, String serverId) {
+        def rtn = [success:false]
+        try {
+            def pending = true
+            def attempts = 0
+            while(pending) {
+                def serverDetail = getServerDetail(authConfig, serverId)
+                if(serverDetail.success == true && serverDetail?.server?.state == 'started') {
+                    def privateIp = serverDetail.server?.'ip_addresses'?.'ip_address'?.find{ it.access == 'utility' && it.family == 'IPv4' }
+                    if(privateIp?.address) {
+                        rtn.success = true
+                        rtn.results = serverDetail.server
+                        break
+                    }
+                } else if(attempts > 3 && serverDetail.success == false && serverDetail.data?.error?.error_message == 'SERVER_NOT_FOUND') {
+                    rtn.error = true
+                    rtn.results = serverDetail.data
+                    pending = false
+                }
+                attempts ++
+                if(attempts > 250) {
+                    pending = false
+                } else {
+                    sleep(1000l * 5l)
+                }
+            }
+        } catch(e) {
+            log.error(e)
+        }
+        return rtn
+    }
+
+    static waitForServerStatus(Map authConfig, String serverId, String status) {
+        def rtn = [success:false]
+        try {
+            def pending = true
+            def attempts = 0
+            while(pending) {
+                def serverDetail = getServerDetail(authConfig, serverId)
+                log.debug("serverDetail: ${serverDetail}")
+                if(serverDetail.success == true && serverDetail?.server?.state == status) {
+                    rtn.success = true
+                    rtn.results = serverDetail.server
+                    pending = false
+                    break
+                }
+                attempts ++
+                if(attempts > 100) {
+                    pending = false
+                } else {
+                    sleep(1000l * 5l)
+                }
+            }
+        } catch(e) {
+            log.error(e)
+        }
+        return rtn
+    }
+
+    static waitForServerNotStatus(Map authConfig, String serverId, String status) {
+        def rtn = [success:false]
+        try {
+            def pending = true
+            def attempts = 0
+            while(pending) {
+                def serverDetail = getServerDetail(authConfig, serverId)
+                if(serverDetail.success == true && serverDetail?.server?.state != status) {
+                    rtn.success = true
+                    rtn.results = serverDetail.server
+                    pending = false
+                    break
+                }
+                attempts ++
+                if(attempts > 100) {
+                    pending = false
+                } else {
+                    sleep(1000l * 5l)
+                }
+            }
+        } catch(e) {
+            log.error(e)
+        }
+        return rtn
+    }
+
+    static checkServerReady(Map authConfig, String serverId) {
+        def rtn = [success:false]
+        try {
+            def pending = true
+            def attempts = 0
+            while(pending) {
+                sleep(1000l * 5l)
+                def serverDetail = getServerDetail(authConfig, serverId)
+                if(serverDetail.success == true && serverDetail?.server?.state) {
+                    def tmpState = serverDetail.server.state
+                    if(tmpState == 'started') {
+                        rtn.success = true
+                        rtn.results = serverDetail.server
+                        pending = false
+                    } else if(tmpState == 'failed') {
+                        rtn.error = true
+                        rtn.results = serverDetail.server
+                        rtn.success = true
+                        pending = false
+                    }
+                }
+                attempts ++
+                if(attempts > 30)
+                    pending = false
+            }
+        } catch(e) {
+            log.error("error waiting for upcloud server: ${e.message}",e)
+        }
+        return rtn
+    }
+
+    static checkStorageReady(Map authConfig, String storageId) {
+        def rtn = [success:false]
+        try {
+            def pending = true
+            def attempts = 0
+            while(pending) {
+                sleep(1000l * 5l)
+                def storageDetail = getStorageDetails(authConfig, storageId)
+                if(storageDetail.success == true && storageDetail?.storage?.state) {
+                    def tmpState = storageDetail.storage.state
+                    if(tmpState == 'online') {
+                        rtn.success = true
+                        rtn.results = storageDetail.storage
+                        pending = false
+                    } else if(tmpState == 'failed') {
+                        rtn.error = true
+                        rtn.results = storageDetail.storage
+                        rtn.success = true
+                        pending = false
+                    }
+                }
+                attempts ++
+                if(attempts > 30)
+                    pending = false
+            }
+        } catch(e) {
+            log.error("error waiting for upcloud storage: ${e.message}",e)
+        }
+        return rtn
+    }
+
     static attachStorage(Map authConfig, String serverId, String storageId, Integer index) {
         def rtn = [success:false]
         try {
@@ -626,6 +774,34 @@ class UpcloudApiService {
         return rtn
     }
 
+    static waitForStorageStatus(Map authConfig, String storageId, String status, Map opts=[:]) {
+        def rtn = [success:false]
+        def maxAttempts = opts?.maxAttempts ?: 100
+        def retryInterval = opts?.retryInterval ?: (1000l * 5l)
+        try {
+            def pending = true
+            def attempts = 0
+            while(pending) {
+                def serverDetail = getStorageDetails(authConfig, storageId)
+                if(serverDetail.success == true && serverDetail?.storage?.state == status) {
+                    rtn.success = true
+                    rtn.results = serverDetail.storage
+                    pending = false
+                    break
+                }
+                attempts ++
+                if(attempts > maxAttempts) {
+                    pending = false
+                } else {
+                    sleep(retryInterval)
+                }
+            }
+        } catch(e) {
+            log.error(e)
+        }
+        return rtn
+    }
+
     static restoreSnapshot(Map authConfig, String stroageId) {
         def rtn = [success:false]
         try {
@@ -659,97 +835,29 @@ class UpcloudApiService {
     }*/
 
     static callApi(Map authConfig, String path, Map opts = [:], String method) {
-        def rtn = [success:false, headers:[:]]
-        def httpClient =  createHttpClient(authConfig + [timeout:requestTimeout])
         def apiUrl = authConfig.apiUrl
-        def username = authConfig.username
-        def password = authConfig.password
+        String username = authConfig.username
+        String password = authConfig.password
         def apiVersion = authConfig.apiVersion ?: upcloudApiVersion
-        def apiPath = "${apiVersion}${path}"
-        def fullUrl = "${apiUrl}/${apiPath}"
+        String apiPath = "${apiVersion}${path}"
+        String fullUrl = "${apiUrl}/${apiPath}"
 
-        return HttpApiClient.callApi(fullUrl, apiPath, username, password, opts, method)
+        String creds = "${username}:${password}".toString()
+        String authHeader = "Basic ${creds.getBytes().encodeBase64().toString()}".toString()
 
-//        log.debug("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${JsonOutput.prettyPrint(JsonOutput.toJson(opts + [password: '*******']))}")
-//        try {
-//            def apiPath = "${apiVersion}${path}"
-//            def fullUrl = "${apiUrl}/${apiPath}"
-//            URIBuilder uriBuilder = new URIBuilder(fullUrl)
-//            if(opts.query) {
-//                opts.query?.each { k, v ->
-//                    uriBuilder.addParameter(k, v)
-//                }
-//            }
-//            HttpRequestBase request
-//            switch(method) {
-//                case 'HEAD':
-//                    request = new HttpHead(uriBuilder.build())
-//                    break
-//                case 'PUT':
-//                    request = new HttpPut(uriBuilder.build())
-//                    break
-//                case 'POST':
-//                    request = new HttpPost(uriBuilder.build())
-//                    break
-//                case 'GET':
-//                    request = new HttpGet(uriBuilder.build())
-//                    break
-//                case 'DELETE':
-//                    request = new HttpDelete(uriBuilder.build())
-//                    break
-//                default:
-//                    throw new Exception('method was not specified')
-//            }
-//            String creds = "${username}:${password}".toString()
-//            String authHeader = "Basic ${creds.getBytes().encodeBase64().toString()}".toString()
-//            request.addHeader(HttpHeaders.AUTHORIZATION, authHeader)
-//            if(!opts.headers || !opts.headers['Content-Type']) {
-//                request.addHeader('Content-Type', 'application/json')
-//            }
-//            opts.headers?.each { k, v ->
-//                request.addHeader(k, v)
-//            }
-//            if(opts.body) {
-//                HttpEntityEnclosingRequestBase postRequest = (HttpEntityEnclosingRequestBase)request
-//                postRequest.setEntity(new StringEntity(opts.body.encodeAsJSON().toString()))
-//            }
-//            CloseableHttpResponse response = httpClient.execute(request)
-//            try {
-//                if(response.getStatusLine().getStatusCode() <= 399) {
-//                    rtn.success = true
-//                    HttpEntity entity = response.getEntity()
-//                    if(entity) {
-//                        def jsonString = EntityUtils.toString(entity)
-//                        if(jsonString) {
-//                            rtn.data = new groovy.json.JsonSlurper().parseText(jsonString)
-//                        }
-//                        log.debug "SUCCESS data to ${fullUrl}, results: ${JsonOutput.prettyPrint(jsonString ?: '')}"
-//                    } else {
-//                        rtn.data = null
-//                    }
-//                    rtn.success = true
-//                } else {
-//                    if(response.getEntity()) {
-//                        def jsonString = EntityUtils.toString(response.getEntity())
-//                        rtn.data = new groovy.json.JsonSlurper().parseText(jsonString)
-//                        log.debug "FAILURE data to ${fullUrl}, results: ${JsonOutput.prettyPrint(jsonString ?: '')}"
-//                    }
-//                    rtn.success = false
-//                    rtn.errorCode = response.getStatusLine().getStatusCode()?.toString()
-//                    rtn.msg = rtn.data?.error?.'error_message' ?: rtn.data?.error
-//                    log.warn("error: ${rtn.errorCode} - ${rtn.data}")
-//                }
-//            } catch(ex) {
-//                log.error("Error occurred processing the response for ${fullUrl}", ex)
-//            } finally {
-//                if(response) {
-//                    response.close()
-//                }
-//            }
-//        } catch(e) {
-//            log.error("${e} : stack: ${e.printStackTrace()}")
-//            rtn.msg = e.message
-//        }
-//        return rtn
-//    }
+        RequestOptions requestOptions = new RequestOptions()
+        if(opts.body) {
+           requestOptions.body = opts.body
+        }
+
+        if(opts.query) {
+            opts.query?.each { k, v ->
+                requestOptions.queryParams.(k) = v
+            }
+        }
+
+        requestOptions.headers = ['Authorization':authHeader, 'Content-Type':'application/json']
+
+        return HttpApiClient.callApi(fullUrl, apiPath, username, password, requestOptions, method)
+    }
 }
