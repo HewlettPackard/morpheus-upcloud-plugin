@@ -77,7 +77,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	Collection<OptionType> getOptionTypes() {
-		Collection<OptionType> options = []
+		Collection<OptionType> options = [
+			new OptionType(
+				code:'provisionType.general.noAgent'
+			)
+		]
 		// TODO: create some option types for provisioning and add them to collection
 		return options
 	}
@@ -99,7 +103,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	Collection<StorageVolumeType> getRootVolumeStorageTypes() {
-		Collection<StorageVolumeType> volumeTypes = []
+		Collection<StorageVolumeType> volumeTypes = [
+			new StorageVolumeType(
+				code:'upcloudVolume'
+			)
+		]
 		// TODO: create some storage volume types and add to collection
 		return volumeTypes
 	}
@@ -110,7 +118,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	Collection<StorageVolumeType> getDataVolumeStorageTypes() {
-		Collection<StorageVolumeType> dataVolTypes = []
+		Collection<StorageVolumeType> dataVolTypes = [
+			new StorageVolumeType(
+					code:'upcloudVolume'
+			)
+		]
 		// TODO: create some data volume types and add to collection
 		return dataVolTypes
 	}
