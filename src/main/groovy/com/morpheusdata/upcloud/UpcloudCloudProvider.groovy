@@ -39,7 +39,7 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getDescription() {
-		return 'Describe me!'
+		return 'UpCloud'
 	}
 
 	/**
@@ -71,6 +71,19 @@ class UpcloudCloudProvider implements CloudProvider {
 	@Override
 	Collection<OptionType> getOptionTypes() {
 		Collection<OptionType> options = []
+		options.add(optionType(meta:[key:'code'], code:'zoneType.upcloud.credential', type:'credential', name:'Credentials', category:'zoneType.upcloud',
+				fieldName:'type', fieldCode:'gomorpheus.label.credentials', fieldLabel:'Credentials', fieldContext:'credential', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:true, global:false,
+				placeHolder:null, helpBlock:'', defaultValue:'local', custom:false, displayOrder:2, fieldClass:null, optionSource:'credentials', config: JsonOutput.toJson(credentialTypes:['username-password']).toString()))
+		options.add(optionType(meta:[key:'code'], code:'zoneType.upcloud.username', type:'text', name:'Username', category:'zoneType.upcloud',
+				fieldName:'username', fieldCode: 'gomorpheus.optiontype.Username', fieldLabel:'Username', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:false, global:false,
+				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:2, fieldClass:null, fieldSize:15, localCredential:true))
+		options.add(optionType(meta:[key:'code'], code:'zoneType.upcloud.password', type:'password', name:'Password', category:'zoneType.upcloud',
+				fieldName:'password', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:false, global:false,
+				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:3, fieldClass:null, fieldSize:25, localCredential:true))
+		options.add(optionType(meta:[key:'code'], code:'zoneType.upcloud.zone', type:'text', name:'Zone', category:'zoneType.upcloud',
+				fieldName:'zone', fieldCode: 'gomorpheus.optiontype.Zone', fieldLabel:'Zone', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:false, global:false,
+				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:4, fieldClass:null, fieldSize:15))
+
 		return options
 	}
 
@@ -253,7 +266,7 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Boolean hasCloudInit() {
-		return true
+		return false
 	}
 
 	/**
