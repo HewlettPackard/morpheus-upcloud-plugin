@@ -856,7 +856,14 @@ class UpcloudApiService {
             }
         }
 
-        requestOptions.headers = ['Authorization':authHeader, 'Content-Type':'application/json']
+        if(opts.headers) {
+            opts.headers?.each { k, v ->
+                requestOptions.headers.(k) = v
+            }
+        }
+
+        requestOptions.headers['Authorization'] = authHeader
+        requestOptions.headers['Content-Type'] = 'application/json'
 
         return HttpApiClient.callApi(fullUrl, apiPath, username, password, requestOptions, method)
     }
