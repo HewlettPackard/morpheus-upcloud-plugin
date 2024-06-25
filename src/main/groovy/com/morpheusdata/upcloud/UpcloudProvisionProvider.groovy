@@ -104,7 +104,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	@Override
 	Collection<StorageVolumeType> getRootVolumeStorageTypes() {
 		Collection<StorageVolumeType> volumeTypes = [
-			new StorageVolumeType(meta:[key:'code'], code:'upcloudVolume', displayName:'UpCloud MaxIOPS', name:'MaxIOPS', description:'UpCloud MaxIOPS', volumeType:'disk', enabled:true,
+			new StorageVolumeType(code:'upcloudVolume', displayName:'UpCloud MaxIOPS', name:'MaxIOPS', description:'UpCloud MaxIOPS', volumeType:'disk', enabled:true,
 				displayOrder:1, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * oneGB), allowSearch:true, volumeCategory:'disk')
 		]
 		// TODO: create some storage volume types and add to collection
@@ -118,7 +118,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	@Override
 	Collection<StorageVolumeType> getDataVolumeStorageTypes() {
 		Collection<StorageVolumeType> dataVolTypes = [
-			new StorageVolumeType(meta:[key:'code'], code:'upcloudVolume', displayName:'UpCloud MaxIOPS', name:'MaxIOPS', description:'UpCloud MaxIOPS', volumeType:'disk', enabled:true,
+			new StorageVolumeType(code:'upcloudVolume', displayName:'UpCloud MaxIOPS', name:'MaxIOPS', description:'UpCloud MaxIOPS', volumeType:'disk', enabled:true,
 				displayOrder:1, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * oneGB), allowSearch:true, volumeCategory:'disk')
 		]
 		// TODO: create some data volume types and add to collection
