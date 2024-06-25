@@ -31,7 +31,7 @@ class UpcloudBackupProvider extends AbstractBackupProvider {
 	 */
 	@Override
 	String getCode() {
-		return 'upcloud-backup'
+		return 'upCloudSnapshot'
 	}
 
 	/**
@@ -42,7 +42,7 @@ class UpcloudBackupProvider extends AbstractBackupProvider {
 	 */
 	@Override
 	String getName() {
-		return 'Upcloud Backup Provider'
+		return 'UpCloud VM Snapshot'
 	}
 	
 	/**
@@ -65,7 +65,7 @@ class UpcloudBackupProvider extends AbstractBackupProvider {
 	 * forced by specific CloudProvider plugins, for example.
 	 */
 	@Override
-	public Boolean getCreatable() { return true; }
+	public Boolean getCreatable() { return false; }
 	
 	/**
 	 * The backup provider supports restoring to a new workload.
@@ -102,7 +102,7 @@ class UpcloudBackupProvider extends AbstractBackupProvider {
 	 * The backup provider supports backups outside an encapsulating job.
 	 */
 	@Override
-	public Boolean getHasOptionalJob() { return true; }
+	public Boolean getHasOptionalJob() { return false; }
 
 	/**
 	 * The backup provider supports scheduled backups. This is primarily used for display of hte schedules and providing
@@ -115,7 +115,7 @@ class UpcloudBackupProvider extends AbstractBackupProvider {
 	 * The backup provider supports running multiple workload backups within an encapsulating job.
 	 */
 	@Override
-	public Boolean getHasJobs() { return true; }
+	public Boolean getHasJobs() { return false; }
 
 	/**
 	 * The backup provider supports retention counts for maintaining the desired number of backups.
