@@ -16,7 +16,6 @@ import com.morpheusdata.model.Network
 import com.morpheusdata.model.NetworkSubnetType
 import com.morpheusdata.model.NetworkType
 import com.morpheusdata.model.OptionType
-import com.morpheusdata.model.ProvisionType
 import com.morpheusdata.model.StorageControllerType
 import com.morpheusdata.model.StorageVolumeType
 import com.morpheusdata.request.ValidateCloudRequest
@@ -171,21 +170,8 @@ class UpcloudCloudProvider implements CloudProvider {
 				enabled:true, selectable:false, externalDelete:false, managed:true, controlPower:false, controlSuspend:false, creatable:true, computeService:'standardComputeService',
 				deleteQueue:'computeStandardDeleteServerQueue', initializeQueue:'computeStandardInitializeServerQueue', displayOrder:16, hasAutomation:true,
 				hasAgent:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType:'node', containerEngine:'docker',
-				provisionType: [
-					new ProvisionType(code:'manual', name:'Manual', hostType:'container', provisionService:'manualProvisionService',
-						managed:true, hostNetwork:true, pickServer:false, createServer:false, multiTenant:false, aclEnabled:true, mapPorts:false, supportsCustomServicePlans:false,
-						hasVolumes:false, deployTargetService:'vmDeployTargetService', hasSecurityGroups:false, hasContainers:true, hasResources:false, hasNodeTypes:true, hasSpecTemplates:false,
-						hasResourcePools:false, requiresResourcePool:false, hasPreview:false, hasState:false, hasRefresh:false,
-						rootStorageTypes:[
-							[meta:[key:'code'], code:'standard']
-						],
-						storageTypes:[
-							[meta:[key:'code'], code:'standard']
-						]
-					)
-				],
-				canSyncHypervisorStats: false,
-				computeType:[domainClass:'computeType', code:'docker-host'],
+				provisionTypeCode: 'manual', canSyncHypervisorStats: false,
+				computeTypeCode:'docker-host',
 				morpheusHypervisorType: [domainClass: 'computeServerType', meta: [key: 'code'], code: 'morpheusComboLinux'],
 				optionTypes:[
 					new OptionType(code:'computeServerType.global.sshHost'),
@@ -204,34 +190,7 @@ class UpcloudCloudProvider implements CloudProvider {
 				enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:false, creatable:false, computeService:'upCloudComputeService',
 				deleteQueue:'computeUpcloudDeleteServerQueue', initializeQueue:'computeUpcloudInitializeServerQueue', displayOrder:17, hasAutomation:true,reconfigureSupported: true,
 				hasAgent:true, containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType:'node', guestVm:true,
-				provisionType:[
-					new ProvisionType(code:'upcloud', name:'UpCloud', hostType:'vm', serverType:'upcloud',
-						provisionService:'upCloudProvisionService', managed:true, hostNetwork:true, pickServer:false, createServer:true,
-						multiTenant:false, aclEnabled:false, mapPorts:false, addVolumes:true,hasVolumes:true, lvmSupported:true, hostDiskMode:'lvm',
-						customSupported:true, supportsCustomServicePlans:false, rootDiskCustomizable:true, rootDiskSizeKnown:true, customizeVolume:true,
-						rootDiskResizable:true, reconfigureSupported:true, backupType:'upCloudSnapshot', deployTargetService:'vmDeployTargetService', nodeFormat:'vm',
-						hasSecurityGroups:false, hasContainers:true, hasResources:false, hasNodeTypes:true, hasSpecTemplates:false,
-						hasResourcePools:false, requiresResourcePool:false, hasPreview:false, hasState:false, hasRefresh:false,
-						canSyncMaxMemoryStats:false,
-						rootStorageTypes:[
-							[meta:[key:'code'], code:'upcloudVolume']
-							//,[meta:[key:'code'], code:'upcloudHddVolume']
-						],
-						storageTypes:[
-							[meta:[key:'code'], code:'upcloudVolume']//,
-							//[meta:[key:'code'], code:'upcloudHddVolume']
-						],
-						backupTypes: [
-							[meta:[key:'code'], code:'upCloudSnapshot']
-						],
-						optionTypes: [
-							[meta:[key:'code'], code:'provisionType.general.noAgent']
-						],
-						virtualImageTypes: [
-							[meta:[key:'code'], code:'qcow2']
-						]
-					)
-				]
+				provisionTypeCode:'upcloud'
 			),
 			new ComputeServerType(
 				code:'upcloudLinux', name:'UpCloud Docker Host', description:'', platform:'linux', nodeType:'morpheus-node',
@@ -239,89 +198,23 @@ class UpcloudCloudProvider implements CloudProvider {
 				deleteQueue:'computeUpcloudDeleteServerQueue', initializeQueue:'computeUpcloudInitializeServerQueue', displayOrder: 16, hasAutomation:true,reconfigureSupported: true,
 				hasAgent:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType:'node', containerEngine:'docker',
 				viewSet:'docker', containerMode:'docker',
-				provisionType:[
-					new ProvisionType(code:'upcloud', name:'UpCloud', hostType:'vm', serverType:'upcloud',
-							provisionService:'upCloudProvisionService', managed:true, hostNetwork:true, pickServer:false, createServer:true,
-							multiTenant:false, aclEnabled:false, mapPorts:false, addVolumes:true,hasVolumes:true, lvmSupported:true, hostDiskMode:'lvm',
-							customSupported:true, supportsCustomServicePlans:false, rootDiskCustomizable:true, rootDiskSizeKnown:true, customizeVolume:true,
-							rootDiskResizable:true, reconfigureSupported:true, backupType:'upCloudSnapshot', deployTargetService:'vmDeployTargetService', nodeFormat:'vm',
-							hasSecurityGroups:false, hasContainers:true, hasResources:false, hasNodeTypes:true, hasSpecTemplates:false,
-							hasResourcePools:false, requiresResourcePool:false, hasPreview:false, hasState:false, hasRefresh:false,
-							canSyncMaxMemoryStats:false,
-							rootStorageTypes:[
-									[meta:[key:'code'], code:'upcloudVolume']
-									//,[meta:[key:'code'], code:'upcloudHddVolume']
-							],
-							storageTypes:[
-									[meta:[key:'code'], code:'upcloudVolume']//,
-									//[meta:[key:'code'], code:'upcloudHddVolume']
-							],
-							backupTypes: [
-									[meta:[key:'code'], code:'upCloudSnapshot']
-							],
-							optionTypes: [
-									[meta:[key:'code'], code:'provisionType.general.noAgent']
-							],
-							virtualImageTypes: [
-									[meta:[key:'code'], code:'qcow2']
-							]
-					)
-				],
-				computeType:[domainClass:'computeType', code:'docker-host']
+				provisionTypeCode:'upcloud',
+				computeTypeCode:'docker-host'
 			),
 			new ComputeServerType(
 				code:'upcloudVm', name:'UpCloud VM Instance', description:'', platform:'linux', nodeType:'morpheus-vm-node',
 				enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:false, creatable:true, computeService:'upCloudComputeService',
 				deleteQueue:'computeUpcloudDeleteServerQueue', initializeQueue:'computeUpcloudInitializeServerQueue', displayOrder: 0, hasAutomation:true,reconfigureSupported: true,
 				hasAgent:true, containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType:'vm', guestVm:true,
-				provisionType:[
-					new ProvisionType(code:'upcloud', name:'UpCloud', hostType:'vm', serverType:'upcloud',
-						provisionService:'upCloudProvisionService', managed:true, hostNetwork:true, pickServer:false, createServer:true,
-						multiTenant:false, aclEnabled:false, mapPorts:false, addVolumes:true,hasVolumes:true, lvmSupported:true, hostDiskMode:'lvm',
-						customSupported:true, supportsCustomServicePlans:false, rootDiskCustomizable:true, rootDiskSizeKnown:true, customizeVolume:true,
-						rootDiskResizable:true, reconfigureSupported:true, backupType:'upCloudSnapshot', deployTargetService:'vmDeployTargetService', nodeFormat:'vm',
-						hasSecurityGroups:false, hasContainers:true, hasResources:false, hasNodeTypes:true, hasSpecTemplates:false,
-						hasResourcePools:false, requiresResourcePool:false, hasPreview:false, hasState:false, hasRefresh:false,
-						canSyncMaxMemoryStats:false,
-						rootStorageTypes:[
-							[meta:[key:'code'], code:'upcloudVolume']
-							//,[meta:[key:'code'], code:'upcloudHddVolume']
-						],
-						storageTypes:[
-							[meta:[key:'code'], code:'upcloudVolume']//,
-							//[meta:[key:'code'], code:'upcloudHddVolume']
-						],
-						backupTypes: [
-							[meta:[key:'code'], code:'upCloudSnapshot']
-						],
-						optionTypes: [
-							[meta:[key:'code'], code:'provisionType.general.noAgent']
-						],
-						virtualImageTypes: [
-							[meta:[key:'code'], code:'qcow2']
-						]
-					)
-				]
+				provisionTypeCode:'upcloud'
 			),
 			new ComputeServerType(
 				code:'selfManagedKvm', name:'Manual KVM Host', description:'', platform:'linux', nodeType:'morpheus-node',
 				enabled:true, selectable:false, externalDelete:false, managed:true, controlPower:false, controlSuspend:false, creatable:false, computeService:'standardComputeService',
 				deleteQueue:'computeStandardDeleteServerQueue', initializeQueue:'computeStandardInitializeServerQueue', displayOrder:16, hasAutomation:true,
 				hasAgent:true, containerHypervisor:false, bareMetalHost:false, vmHypervisor:true, agentType:'vm', morpheusHypervisor:true, vmEngine:'kvm', viewSet:'selfManagedKvm',
-				provisionType: [
-					new ProvisionType(code:'manual', name:'Manual', hostType:'container', provisionService:'manualProvisionService',
-						managed:true, hostNetwork:true, pickServer:false, createServer:false, multiTenant:false, aclEnabled:true, mapPorts:false, supportsCustomServicePlans:false,
-						hasVolumes:false, deployTargetService:'vmDeployTargetService', hasSecurityGroups:false, hasContainers:true, hasResources:false, hasNodeTypes:true, hasSpecTemplates:false,
-						hasResourcePools:false, requiresResourcePool:false, hasPreview:false, hasState:false, hasRefresh:false,
-						rootStorageTypes:[
-							[meta:[key:'code'], code:'standard']
-						],
-						storageTypes:[
-							[meta:[key:'code'], code:'standard']
-						]
-					)
-				],
-				computeType:[domainClass:'computeType', code:'kvm-host'],
+				provisionTypeCode: 'manual',
+				computeTypeCode: 'kvm-host',
 				optionTypes:[
 					new OptionType(code:'computeServerType.global.sshHost'),
 					new OptionType(code:'computeServerType.global.sshPort'),
