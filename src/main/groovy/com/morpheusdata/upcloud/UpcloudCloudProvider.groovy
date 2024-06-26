@@ -71,16 +71,16 @@ class UpcloudCloudProvider implements CloudProvider {
 	@Override
 	Collection<OptionType> getOptionTypes() {
 		Collection<OptionType> options = [
-			new OptionType(code:'zoneType.upcloud.credential', type:'credential', name:'Credentials', category:'zoneType.upcloud',
+			new OptionType(code:'zoneType.upcloud.credential', inputType: OptionType.InputType.CREDENTIAL, name:'Credentials', category:'zoneType.upcloud',
 				fieldName:'type', fieldCode:'gomorpheus.label.credentials', fieldLabel:'Credentials', fieldContext:'credential', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:true, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:'local', custom:false, displayOrder:2, fieldClass:null, optionSource:'credentials', config: JsonOutput.toJson(credentialTypes:['username-password']).toString()),
-			new OptionType(code:'zoneType.upcloud.username', type:'text', name:'Username', category:'zoneType.upcloud',
+			new OptionType(code:'zoneType.upcloud.username', inputType:OptionType.InputType.TEXT, name:'Username', category:'zoneType.upcloud',
 				fieldName:'username', fieldCode: 'gomorpheus.optiontype.Username', fieldLabel:'Username', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:false, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:2, fieldClass:null, fieldSize:15, localCredential:true),
-			new OptionType(code:'zoneType.upcloud.password', type:'password', name:'Password', category:'zoneType.upcloud',
+			new OptionType(code:'zoneType.upcloud.password', inputType:OptionType.InputType.PASSWORD, name:'Password', category:'zoneType.upcloud',
 				fieldName:'password', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:false, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:3, fieldClass:null, fieldSize:25, localCredential:true),
-			new OptionType(code:'zoneType.upcloud.zone', type:'text', name:'Zone', category:'zoneType.upcloud',
+			new OptionType(code:'zoneType.upcloud.zone', inputType:OptionType.InputType.TEXT, name:'Zone', category:'zoneType.upcloud',
 				fieldName:'zone', fieldCode: 'gomorpheus.optiontype.Zone', fieldLabel:'Zone', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:false, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:4, fieldClass:null, fieldSize:15)
 		]
@@ -168,11 +168,10 @@ class UpcloudCloudProvider implements CloudProvider {
 			new ComputeServerType(
 				code:'selfManagedLinux', name:'Manual Docker Host', description:'', platform:'linux', nodeType:'morpheus-node',
 				enabled:true, selectable:false, externalDelete:false, managed:true, controlPower:false, controlSuspend:false, creatable:true, computeService:'standardComputeService',
-				deleteQueue:'computeStandardDeleteServerQueue', initializeQueue:'computeStandardInitializeServerQueue', displayOrder:16, hasAutomation:true,
-				hasAgent:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType:'node', containerEngine:'docker',
-				provisionTypeCode: 'manual', canSyncHypervisorStats: false,
+				displayOrder:16, hasAutomation:true,
+				containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.host, containerEngine:'docker',
+				provisionTypeCode: 'manual',
 				computeTypeCode:'docker-host',
-				morpheusHypervisorType: [domainClass: 'computeServerType', meta: [key: 'code'], code: 'morpheusComboLinux'],
 				optionTypes:[
 					new OptionType(code:'computeServerType.global.sshHost'),
 					new OptionType(code:'computeServerType.global.sshPort'),
@@ -188,31 +187,30 @@ class UpcloudCloudProvider implements CloudProvider {
 			new ComputeServerType(
 				code:'upcloudWindows', name:'UpCloud Windows Node', description:'', platform:'windows', nodeType:'morpheus-windows-node',
 				enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:false, creatable:false, computeService:'upCloudComputeService',
-				deleteQueue:'computeUpcloudDeleteServerQueue', initializeQueue:'computeUpcloudInitializeServerQueue', displayOrder:17, hasAutomation:true,reconfigureSupported: true,
-				hasAgent:true, containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType:'node', guestVm:true,
+				displayOrder:17, hasAutomation:true,reconfigureSupported: true,
+				containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.host, guestVm:true,
 				provisionTypeCode:'upcloud'
 			),
 			new ComputeServerType(
 				code:'upcloudLinux', name:'UpCloud Docker Host', description:'', platform:'linux', nodeType:'morpheus-node',
 				enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:false, creatable:false, computeService:'upCloudComputeService',
-				deleteQueue:'computeUpcloudDeleteServerQueue', initializeQueue:'computeUpcloudInitializeServerQueue', displayOrder: 16, hasAutomation:true,reconfigureSupported: true,
-				hasAgent:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType:'node', containerEngine:'docker',
-				viewSet:'docker', containerMode:'docker',
+				displayOrder: 16, hasAutomation:true,reconfigureSupported: true,
+				containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.host, containerEngine:'docker',
 				provisionTypeCode:'upcloud',
 				computeTypeCode:'docker-host'
 			),
 			new ComputeServerType(
 				code:'upcloudVm', name:'UpCloud VM Instance', description:'', platform:'linux', nodeType:'morpheus-vm-node',
 				enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:false, creatable:true, computeService:'upCloudComputeService',
-				deleteQueue:'computeUpcloudDeleteServerQueue', initializeQueue:'computeUpcloudInitializeServerQueue', displayOrder: 0, hasAutomation:true,reconfigureSupported: true,
-				hasAgent:true, containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType:'vm', guestVm:true,
+				displayOrder: 0, hasAutomation:true,reconfigureSupported: true,
+				containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.guest, guestVm:true,
 				provisionTypeCode:'upcloud'
 			),
 			new ComputeServerType(
 				code:'selfManagedKvm', name:'Manual KVM Host', description:'', platform:'linux', nodeType:'morpheus-node',
 				enabled:true, selectable:false, externalDelete:false, managed:true, controlPower:false, controlSuspend:false, creatable:false, computeService:'standardComputeService',
-				deleteQueue:'computeStandardDeleteServerQueue', initializeQueue:'computeStandardInitializeServerQueue', displayOrder:16, hasAutomation:true,
-				hasAgent:true, containerHypervisor:false, bareMetalHost:false, vmHypervisor:true, agentType:'vm', morpheusHypervisor:true, vmEngine:'kvm', viewSet:'selfManagedKvm',
+				displayOrder:16, hasAutomation:true,
+				containerHypervisor:false, bareMetalHost:false, vmHypervisor:true, agentType:ComputeServerType.AgentType.guest,
 				provisionTypeCode: 'manual',
 				computeTypeCode: 'kvm-host',
 				optionTypes:[
