@@ -56,7 +56,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	String getProvisionTypeCode() {
-		return PROVISION_PROVIDER_CODE
+		return 'upcloud'
 	}
 
 	/**
@@ -295,7 +295,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	String getCode() {
-		return PROVISION_PROVIDER_CODE
+		return 'upcloud'
 	}
 
 	/**

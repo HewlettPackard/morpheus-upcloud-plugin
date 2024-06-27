@@ -425,7 +425,7 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getCode() {
-		return CLOUD_PROVIDER_CODE
+		return 'upcloud'
 	}
 
 	/**
