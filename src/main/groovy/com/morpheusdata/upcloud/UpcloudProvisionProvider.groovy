@@ -4,6 +4,7 @@ import com.morpheusdata.core.AbstractProvisionProvider
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
+import com.morpheusdata.core.util.ComputeUtility
 import com.morpheusdata.model.ComputeServer
 import com.morpheusdata.model.Icon
 import com.morpheusdata.model.OptionType
@@ -105,7 +106,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	Collection<StorageVolumeType> getRootVolumeStorageTypes() {
 		Collection<StorageVolumeType> volumeTypes = [
 			new StorageVolumeType(code:'upcloudVolume', displayName:'UpCloud MaxIOPS', name:'MaxIOPS', description:'UpCloud MaxIOPS', volumeType:'disk', enabled:true,
-				displayOrder:1, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * oneGB), allowSearch:true, volumeCategory:'disk')
+				displayOrder:1, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk')
 		]
 		// TODO: create some storage volume types and add to collection
 		return volumeTypes
@@ -119,7 +120,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	Collection<StorageVolumeType> getDataVolumeStorageTypes() {
 		Collection<StorageVolumeType> dataVolTypes = [
 			new StorageVolumeType(code:'upcloudVolume', displayName:'UpCloud MaxIOPS', name:'MaxIOPS', description:'UpCloud MaxIOPS', volumeType:'disk', enabled:true,
-				displayOrder:1, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * oneGB), allowSearch:true, volumeCategory:'disk')
+				displayOrder:1, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk')
 		]
 		// TODO: create some data volume types and add to collection
 		return dataVolTypes
