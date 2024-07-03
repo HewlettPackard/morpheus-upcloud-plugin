@@ -17,7 +17,7 @@ class UpcloudImageDatasetProvider extends AbstractDatasetProvider<VirtualImage, 
 
     public static final providerName = 'Upcloud Image Dataset Provider'
     public static final providerNamespace = 'upcloud'
-    public static final providerKey = 'upcloudImageDataset'
+    public static final providerKey = 'upcloud.upcloudImageDataset'
     public static final providerDescription = 'Get images from Upcloud'
 
 
@@ -70,7 +70,7 @@ class UpcloudImageDatasetProvider extends AbstractDatasetProvider<VirtualImage, 
     }
 
     VirtualImage item(Long value) {
-        return list(new DataQuery().withFilter("id", value).max(1)).toList().blockingGet().first()
+        return morpheus.services.virtualImage.get(value)
     }
 
     @Override
