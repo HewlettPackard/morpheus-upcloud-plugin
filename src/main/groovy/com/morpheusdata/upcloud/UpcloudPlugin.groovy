@@ -17,6 +17,7 @@ package com.morpheusdata.upcloud
 
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.model.*
+import com.morpheusdata.upcloud.datasets.UpcloudImageDatasetProvider
 import com.morpheusdata.upcloud.services.UpcloudApiService
 
 class UpcloudPlugin extends Plugin {
@@ -32,6 +33,7 @@ class UpcloudPlugin extends Plugin {
         this.registerProvider(new UpcloudCloudProvider(this,this.morpheus))
         this.registerProvider(new UpcloudProvisionProvider(this,this.morpheus))
         this.registerProvider(new UpcloudBackupProvider(this,this.morpheus))
+        this.registerProvider(new UpcloudImageDatasetProvider(this, this.morpheus))
     }
 
     /**
