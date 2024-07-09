@@ -4,6 +4,8 @@ import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.providers.CloudProvider
 import com.morpheusdata.core.providers.ProvisionProvider
+import com.morpheusdata.core.util.ConnectionUtils
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.model.BackupProvider
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.CloudFolder
@@ -13,13 +15,17 @@ import com.morpheusdata.model.ComputeServerType
 import com.morpheusdata.model.Datastore
 import com.morpheusdata.model.Icon
 import com.morpheusdata.model.Network
+import com.morpheusdata.model.NetworkProxy
 import com.morpheusdata.model.NetworkSubnetType
 import com.morpheusdata.model.NetworkType
 import com.morpheusdata.model.OptionType
+import com.morpheusdata.model.ProvisionType
 import com.morpheusdata.model.StorageControllerType
 import com.morpheusdata.model.StorageVolumeType
 import com.morpheusdata.request.ValidateCloudRequest
 import com.morpheusdata.response.ServiceResponse
+import com.morpheusdata.upcloud.sync.PublicTemplatesSync
+import com.morpheusdata.upcloud.util.UpcloudStatusUtility
 
 class UpcloudCloudProvider implements CloudProvider {
 	public static final String CLOUD_PROVIDER_CODE = 'upcloud.cloud'
@@ -247,7 +253,22 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse initializeCloud(Cloud cloudInfo) {
-		return ServiceResponse.success()
+		ServiceResponse rtn = new ServiceResponse(success: false)
+		try {
+			if(cloudInfo) {
+				if(cloudInfo.enabled == true) {
+					refreshDaily(cloudInfo)
+					refresh(cloudInfo)
+					rtn = ServiceResponse.success()
+				}
+			} else {
+				rtn = ServiceResponse.error('No zone found')
+			}
+		} catch(e) {
+			e.printStackTrace()
+			log.error("An Exception Has Occurred: ${e.message}",e)
+		}
+		return rtn
 	}
 
 	/**
@@ -260,7 +281,48 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse refresh(Cloud cloudInfo) {
-		return ServiceResponse.success()
+		ServiceResponse rtn = new ServiceResponse(success: false)
+
+		HttpApiClient client
+
+		try {
+			NetworkProxy proxySettings = cloudInfo.apiProxy
+			client = new HttpApiClient()
+			client.networkProxy = proxySettings
+
+			def authConfig = plugin.getAuthConfig(cloudInfo)
+			def apiUrlObj = new URL(authConfig.apiUrl)
+			def apiHost = apiUrlObj.getHost()
+			def apiPort = apiUrlObj.getPort() > 0 ? apiUrlObj.getPort() : (apiUrlObj?.getProtocol()?.toLowerCase() == 'https' ? 443 : 80)
+			def hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, proxySettings)
+			if(hostOnline) {
+				def testResults = UpcloudStatusUtility.testConnection(authConfig)
+				if(testResults.success == true) {
+					//def doInventory = cloudInfo.getConfigProperty('importExisting')
+					//def vmCacheOpts = [zone:zone, createNew:(inventoryLevel == 'basic' || inventoryLevel == 'full'), inventoryLevel:inventoryLevel]
+
+					//(new UserImagesSync(this.plugin, cloudInfo)).execute()
+					//(new VirtualMachinesSync(this.plugin, cloudInfo)).execute()
+
+					rtn = ServiceResponse.success()
+				} else {
+					rtn = ServiceResponse.error(testResults.invalidLogin == true ? 'invalid credentials' : 'error connecting', null, [status: Cloud.Status.offline])
+				}
+			} else {
+				rtn = ServiceResponse.error('upcloud not reachable', null, [status: Cloud.Status.offline])
+			}
+//			ProvisionType upCloudProvType = ProvisionType.findByCode('upcloud')
+//			updateLayoutsForScale(upCloudProvType)
+			rtn = ServiceResponse.success()
+		} catch (e) {
+			log.error("refresh cloud error: ${e}", e)
+		} finally {
+			if(client) {
+				client.shutdownClient()
+			}
+		}
+
+		return rtn
 	}
 
 	/**
@@ -271,6 +333,12 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	void refreshDaily(Cloud cloudInfo) {
+		try {
+			//(new PlansSync(this.plugin, cloudInfo)).execute()
+			(new PublicTemplatesSync(this.plugin, cloudInfo)).execute()
+		} catch(e) {
+			log.error("refreshZone error: ${e}", e)
+		}
 	}
 
 	/**
