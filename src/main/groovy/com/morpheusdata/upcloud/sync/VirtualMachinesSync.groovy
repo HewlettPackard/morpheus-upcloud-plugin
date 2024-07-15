@@ -71,9 +71,8 @@ class VirtualMachinesSync {
     }
 
     private addMissingVirtualMachines(Collection<Map> addList) {
-        def saves = []
         def authConfig = plugin.getAuthConfig(cloud)
-        def serverType = ComputeServerType.findByCode('upcloudUnmanaged')
+        def serverType = new ComputeServerType(code: 'upcloudUnmanaged')
         def servicePlans = morpheusContext.async.servicePlan.listIdentityProjections(
                 new DataQuery().withFilter("provisionType", "upcloud")
                         .withFilter("active", true)
@@ -124,11 +123,13 @@ class VirtualMachinesSync {
                 def add = new ComputeServer(addConfig)
                 addCapacityConfig.server = add
                 add.capacityInfo = new ComputeCapacityInfo()(addCapacityConfig)
-                saves << add
 
+                morpheusContext.async.computeServer.create(add)
                 if(serverResults?.volumes)
                     cacheVirtualMachineVolumes(cloud, add, serverResults.volumes)
+
             }
+
         } catch(e2) {
             log.error("error reating new unmanaged upcloud server during sync operation: ${e2}", e2)
 
@@ -137,8 +138,10 @@ class VirtualMachinesSync {
 
     private updateMatchedVirtualMachines(List<SyncTask.UpdateItem<ComputeServer, Map>> updateList) {
         def saves = []
+        def savesVolumes = [:]
+        def savesCloudServers = [:]
         def authConfig = plugin.getAuthConfig(cloud)
-        def serverType = ComputeServerType.findByCode('upcloudUnmanaged')
+        def serverType = new ComputeServerType(code:'upcloudUnmanaged')
         def servicePlans = morpheusContext.async.servicePlan.listIdentityProjections(
                 new DataQuery().withFilter("provisionType", "upcloud")
                         .withFilter("active", true)
@@ -148,7 +151,7 @@ class VirtualMachinesSync {
             for(updateItem in updateList) {
                 def server
                 def vm = updateItem.masterItem
-                server = ComputeServer.get(updateItem.existingItem.id)
+                server = updateItem.existingItem
                 if (server && server.status != 'provisioning') {
                     def cloudServer = updateItem.masterItem
                     def powerState = cloudServer.state == 'started' ? 'on' : 'off'
@@ -236,79 +239,11 @@ class VirtualMachinesSync {
                                 server.capacityInfo.maxStorage = maxStorage
                                 doSave = true
                             }
-                            def volumeSaveRequired = cacheVirtualMachineVolumes(server, cloudServer, serverResults.volumes)
-                            if (volumeSaveRequired) {
-                                saves << server
-                                doSave = true
-                            }
+                            savesVolumes[server.id] = server.volume
                         }
                     }
                     if (powerState != server.powerState) {
                         server.powerState = powerState
-                        if (server.computeServerType?.guestVm) {
-                            def currentServer = server
-                            if (server.powerState == 'on') {
-                                def workloads = morpheusContext.async.workload.list(
-                                        new DataQuery().withFilter("server.id", currentServer.id)
-                                                .withFilter("status", Workload.Status.deploying)
-                                )
-
-                                workloads?.each {
-                                    it.userStatus = Workload.Status.running
-                                    it.status = Workload.Status.running
-                                }
-
-                                def instanceIds = morpheusContext.async.workload.list(
-                                        new DataQuery().withFilter("status", "!=", Workload.Status.failed)
-                                                .withFilter("status", "!=", Workload.Status.deploying)
-                                                .withFilters(new DataAndFilter(
-                                                        new DataFilter('instance.status', '!=', Instance.Status.pendingReconfigureApproval),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.pendingDeleteApproval),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.removing),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.restarting),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.finishing),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.resizing)
-                                                ))
-                                                .withFilter("server.id", currentServer.id)
-                                                .propertyList("instance.id")
-                                )
-
-                                instanceIds?.each {
-                                    morpheusContext.async.computeServer.updatePowerState(it, Instance.Status.running).blockingGet()
-                                }
-
-                            } else {
-                                def workloads = morpheusContext.async.workload.list(
-                                        new DataQuery().withFilter("server.id", currentServer.id)
-                                                .withFilter("status", Workload.Status.deploying)
-                                )
-
-                                workloads?.each {
-                                    it.status = Workload.Status.stopped
-                                }
-
-                                def instanceIds = morpheusContext.async.workload.list(
-                                        new DataQuery().withFilter("status", "!=", Workload.Status.failed)
-                                                .withFilter("status", "!=", Workload.Status.deploying)
-                                                .withFilters(new DataAndFilter(
-                                                        new DataFilter('instance.status', '!=', Instance.Status.pendingReconfigureApproval),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.pendingDeleteApproval),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.removing),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.restarting),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.finishing),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.resizing),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.stopping),
-                                                        new DataFilter('instance.status', '!=', Instance.Status.starting)
-                                                ))
-                                                .withFilter("server.id", currentServer.id)
-                                                .propertyList("instance.id")
-                                )
-
-                                instanceIds?.each {
-                                    morpheusContext.async.computeServer.updatePowerState(it, Instance.Status.stopped).blockingGet()
-                                }
-                            }
-                        }
                         doSave = true
                     }
                     //Set the plan on the server
@@ -327,9 +262,14 @@ class VirtualMachinesSync {
                         }
                     }
                     if (doSave == true) {
-                        morpheusContext.async.computeServer.bulkSave(saves).blockingGet()
+                        saves << server
+                        savesCloudServers[cloudServer.id] = cloudServer.server
                     }
                 }
+            }
+            morpheusContext.async.computeServer.bulkSave(saves).blockingGet()
+            saves?.each { it ->
+                cacheVirtualMachineVolumes(it, savesCloudServers[it.id], savesVolumes[it.id])
             }
         } catch(e) {
             log.warn("error syncing existing vm ${server.id}: ${e}", e)
@@ -352,7 +292,7 @@ class VirtualMachinesSync {
         return rtn
     }
 
-    private cacheVirtualMachineVolumes(ComputeServer server, Map cloudServer, List volumes) {
+    private cacheVirtualMachineVolumes(ComputeServer server, List volumes) {
         def saveRequired = false
         try {
             //ignore servers that are being resized
@@ -360,7 +300,7 @@ class VirtualMachinesSync {
                 log.warn("ignoring server ${server} because it is resizing")
                 return saveRequired
             }
-            def storageType = StorageVolumeType.findByCode('upcloudVolume', [cache:true])
+            def storageType = new StorageVolumeType(code:'upcloudVolume')
             SyncList.MatchFunction matchFunction = { StorageVolume morpheusVolume, Map volume ->
                 morpheusVolume?.externalId == volume.storageId
             }
@@ -380,7 +320,6 @@ class VirtualMachinesSync {
                 addVolume.deviceDisplayName = UpcloudProvisionProvider.extractDiskDisplayName(volumeName)
                 if(volumeName == '/dev/vda')
                     addVolume.rootVolume = true
-                server.volumes.add(addVolume)
                 createList << addVolume
                 saveRequired = true
             }
@@ -419,14 +358,15 @@ class VirtualMachinesSync {
             }
 
             if(createList) {
-                morpheusContext.async.storageVolume.bulkCreate(createList).blockingGet()
+                morpheusContext.async.storageVolume.create(createList, server).blockingGet()
             }
+
             if(saveList) {
                 morpheusContext.async.storageVolume.bulkSave(saveList).blockingGet()
             }
 
             if(removeList) {
-                morpheusContext.async.storageVolume.bulkRemove(removeList).blockingGet()
+                morpheusContext.async.storageVolume.remove(removeList, server, false).blockingGet()
             }
         } catch(e) {
             log.error("error syncing volumes ${e}", e)
