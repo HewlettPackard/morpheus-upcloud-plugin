@@ -225,11 +225,11 @@ class PlansSync {
             }
 
             Map customPlanOpts = getCustomServicePlan()
-            ServicePlan customPlan = new ServicePlan(code: 'upcloud.plan.Custom UpCloud', active: true)
-            customPlan.name = customPlanOpts.name
-            customPlan.maxCores = customPlanOpts.core_number
-            customPlan.maxMemory = customPlanOpts.memory_amount
-            customPlan.maxStorage = customPlanOpts.storage_size
+            def customPlan = morpheusContext.async.servicePlan.find(
+                    new DataQuery().withFilter("code",'upcloud.plan.Custom UpCloud')
+                    .withFilter("active", true)
+            ).blockingGet()
+
             syncCustomPlan(customPlan, cloudPriceData, storagePrice)
 
             // Account Price Set
@@ -519,7 +519,8 @@ class PlansSync {
         morpheusContext.async.accountPriceSet.addToPriceSet(priceSet, storageMonthPrice)
 
         // Add the set to the correct service plan
-        morpheusContext.async.accountPriceSet.addPriceSetToParent(customPlan, priceSet)
+        def spps = new ServicePlanPriceSet(servicePlan: customPlan, priceSet: priceSet)
+        morpheusContext.async.servicePlanPriceSet.create(spps).blockingGet()
     }
 
     private static getCustomServicePlan() {
