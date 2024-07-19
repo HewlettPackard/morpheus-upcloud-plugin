@@ -63,7 +63,7 @@ class PlansSync {
                 log.error "Error in getting plans: ${planListResults}"
             }
         } catch(e) {
-            log.error("cachePlans error: ${e}", e)
+            log.error("plansSync error: ${e}", e)
         }
     }
 
