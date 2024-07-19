@@ -1,6 +1,7 @@
 package com.morpheusdata.upcloud.sync
 
 import com.morpheusdata.model.StorageVolume
+import com.morpheusdata.model.projection.ServicePlanIdentityProjection
 import com.morpheusdata.upcloud.util.UpcloudComputeUtility
 
 import com.morpheusdata.core.MorpheusContext
@@ -22,7 +23,10 @@ import com.morpheusdata.model.ComputeServerType
 import com.morpheusdata.model.StorageVolumeType
 import com.morpheusdata.core.util.SyncList
 import com.morpheusdata.upcloud.UpcloudProvisionProvider
+import groovy.util.logging.Slf4j
+import io.reactivex.rxjava3.core.Observable
 
+@Slf4j
 class VirtualMachinesSync {
     private Cloud cloud
     UpcloudPlugin plugin
@@ -56,7 +60,7 @@ class VirtualMachinesSync {
                 }.withLoadObjectDetailsFromFinder { List<SyncTask.UpdateItemDto<ComputeServerIdentityProjection, Map>> updateItems ->
                     morpheusContext.async.computeServer.listById(updateItems.collect { it.existingItem.id } as List<Long>)
                 }.onAdd { itemsToAdd ->
-                    addMissingVirtualMachines(itemsToAdd)
+                    addMissingVirtualMachines(itemsToAdd, servicePlans)
                 }.onUpdate { List<SyncTask.UpdateItem<ComputeServer, Map>> updateItems ->
                     updateMatchedVirtualMachines(updateItems)
                 }.onDelete { removeItems ->
@@ -70,13 +74,11 @@ class VirtualMachinesSync {
         }
     }
 
-    private addMissingVirtualMachines(Collection<Map> addList) {
+    private addMissingVirtualMachines(Collection<Map> addList, Observable<ServicePlanIdentityProjection> servicePlans) {
         def authConfig = plugin.getAuthConfig(cloud)
         def serverType = new ComputeServerType(code: 'upcloudUnmanaged')
-        def servicePlans = morpheusContext.async.servicePlan.listIdentityProjections(
-                new DataQuery().withFilter("provisionType", "upcloud")
-                        .withFilter("active", true)
-        )
+        def adds = []
+        def serverAdds = [:]
 
         try {
             for(cloudItem in addList) {
@@ -123,16 +125,16 @@ class VirtualMachinesSync {
                 def add = new ComputeServer(addConfig)
                 addCapacityConfig.server = add
                 add.capacityInfo = new ComputeCapacityInfo()(addCapacityConfig)
-
-                morpheusContext.async.computeServer.create(add)
-                if(serverResults?.volumes)
-                    cacheVirtualMachineVolumes(cloud, add, serverResults.volumes)
-
+                adds << add
+                serverAdds[add.id] = serverResults.volumes
             }
 
+            morpheusContext.async.computeServer.bulkCreate(adds).blockingGet()
+            adds?.each {
+                cacheVirtualMachineVolumes(cloud, it, serverAdds[it.id])
+            }
         } catch(e2) {
             log.error("error reating new unmanaged upcloud server during sync operation: ${e2}", e2)
-
         }
     }
 
