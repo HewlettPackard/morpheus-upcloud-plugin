@@ -32,16 +32,17 @@ class VirtualMachinesSync {
     UpcloudPlugin plugin
     private MorpheusContext morpheusContext
 
-    VirtualMachinesSync(Cloud cloud, UpcloudPlugin plugin) {
+    VirtualMachinesSync(Cloud cloud, UpcloudPlugin plugin, MorpheusContext morpheusContext) {
         this.cloud = cloud
         this.plugin = plugin
-        this.morpheusContext = plugin.morpheusContext
+        this.morpheusContext = morpheusContext
     }
 
     def execute() {
         try {
             def authConfig = plugin.getAuthConfig(cloud)
             def apiResults = UpcloudApiService.listServers(authConfig)
+            log.info("apiResults: ${apiResults}")
 
             if (apiResults.success == true) {
                 def servicePlans = morpheusContext.async.servicePlan.listIdentityProjections(
@@ -51,10 +52,11 @@ class VirtualMachinesSync {
 
                 def serverRecords = morpheusContext.async.computeServer.listIdentityProjections(
                         new DataQuery().withFilter("account", cloud.account)
-                        .withFilter("zone", cloud)
+                        .withFilter("zone_id", cloud.id)
                 )
+                log.info("SERVER RECORDS: ${serverRecords}")
 
-                SyncTask<ComputeServerIdentityProjection, Map, ComputeServer> syncTask = new SyncTask<>(serverRecords, apiResults.imageData as Collection<Map>) as SyncTask<ComputeServerIdentityProjection, Map, ComputeServer>
+                SyncTask<ComputeServerIdentityProjection, Map, ComputeServer> syncTask = new SyncTask<>(serverRecords, apiResults.data.servers.server as Collection<Map>) as SyncTask<ComputeServerIdentityProjection, Map, ComputeServer>
                 syncTask.addMatchFunction { ComputeServerIdentityProjection imageObject, Map cloudItem ->
                     imageObject.externalId == cloudItem?.uuid
                 }.withLoadObjectDetailsFromFinder { List<SyncTask.UpdateItemDto<ComputeServerIdentityProjection, Map>> updateItems ->
@@ -70,7 +72,7 @@ class VirtualMachinesSync {
                 log.error "Error in getting images: ${apiResults}"
             }
         } catch(e) {
-            log.error("cachePublicTemplates error: ${e}", e)
+            log.error("cacheVirtualMachines error: ${e}", e)
         }
     }
 
@@ -134,7 +136,7 @@ class VirtualMachinesSync {
                 cacheVirtualMachineVolumes(cloud, it, serverAdds[it.id])
             }
         } catch(e2) {
-            log.error("error reating new unmanaged upcloud server during sync operation: ${e2}", e2)
+            log.error("error creating new unmanaged upcloud server during sync operation: ${e2}", e2)
         }
     }
 
@@ -279,6 +281,7 @@ class VirtualMachinesSync {
     }
 
     def removeMissingVirtualMachines(List removeList) {
+        log.debug("VIRTUAL MACHINES REMOVE LIST: ${removeList}")
         morpheusContext.async.computeServer.bulkRemove(removeList).blockingGet()
     }
 

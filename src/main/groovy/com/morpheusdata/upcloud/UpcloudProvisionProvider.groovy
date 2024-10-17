@@ -81,7 +81,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	Collection<OptionType> getOptionTypes() {
 		Collection<OptionType> options = [
 			new OptionType(
-				code:'provisionType.general.noAgent'
+				code:'provisionType.upcloud.noAgent', displayOrder: 4, name: 'skip agent install', fieldLabel:'Skip Agent Install', fieldName:'noAgent'
 			)
 		]
 		// TODO: create some option types for provisioning and add them to collection
