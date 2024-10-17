@@ -851,11 +851,6 @@ class UpcloudApiService {
         def apiPath = "${apiVersion}${path}".toString()
         log.info("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${JsonOutput.prettyPrint(JsonOutput.toJson(opts + [password: '*******']))}")
 
-        String creds = "${username}:${password}".toString()
-        String authHeader = "Basic ${creds.getBytes().encodeBase64().toString()}".toString()
-        log.info("CREDS: ${creds}")
-        log.info("AUTHHEADER: ${authHeader}")
-
         RequestOptions requestOptions = new RequestOptions(headers: [:])
         if(opts.body) {
            requestOptions.body = opts.body
@@ -875,7 +870,6 @@ class UpcloudApiService {
 
         log.info("REQUEST OPTIONS HEADERS: ${requestOptions.headers}")
         log.info("REQUEST OPTIONS QUERY PARAMS: ${requestOptions.queryParams}")
-        requestOptions.headers['Authorization'] = authHeader
         requestOptions.headers['Content-Type'] = 'application/json'
 
         HttpApiClient client = new HttpApiClient()
