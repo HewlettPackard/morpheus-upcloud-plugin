@@ -42,7 +42,7 @@ class UserImagesSync {
                 def storages = imageResults?.data?.storages?.storage ?: []
                 log.debug("STORAGES: ${storages}")
 
-                SyncTask<VirtualImageIdentityProjection, Map, VirtualImage> syncTask = new SyncTask<>(imageRecords, storages as Collection<Map>) //as SyncTask<VirtualImageIdentityProjection, Map, VirtualImage>
+                SyncTask<VirtualImageIdentityProjection, Map, VirtualImage> syncTask = new SyncTask<>(imageRecords, storages as Collection<Map>) as SyncTask<VirtualImageIdentityProjection, Map, VirtualImage>
                 syncTask.addMatchFunction { VirtualImageIdentityProjection imageObject, Map cloudItem ->
                     imageObject.externalId == cloudItem?.uuid.toString()
                 }.withLoadObjectDetailsFromFinder { List<SyncTask.UpdateItemDto<VirtualImageIdentityProjection, Map>> updateItems ->

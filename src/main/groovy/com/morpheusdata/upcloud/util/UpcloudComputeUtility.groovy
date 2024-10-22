@@ -15,6 +15,7 @@ import org.apache.http.client.methods.HttpRequestBase
 import org.apache.http.client.utils.URIBuilder
 import org.apache.http.entity.StringEntity
 import org.apache.http.util.EntityUtils
+import com.morpheusdata.upcloud.services.UpcloudApiService
 
 @Commons
 class UpcloudComputeUtility {
@@ -22,11 +23,12 @@ class UpcloudComputeUtility {
     static requestTimeout = 300000 //5 minutes?
 
     static getServerDetail(Map authConfig, String serverId) {
+        log.info("GET SERVER DETAIL: ${serverId}")
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = "/server/${serverId}"
-            def callResults = callApi(authConfig, callPath, callOpts, 'GET')
+            def callResults = UpcloudApiService.callApi(authConfig, callPath, callOpts, 'GET')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.server = rtn.data?.server
@@ -76,93 +78,93 @@ class UpcloudComputeUtility {
         return rtn
     }
 
-    static callApi(Map authConfig, String path, Map opts = [:], String method) {
-        def rtn = [success:false, headers:[:]]
-        def httpClient =  createHttpClient(authConfig + [timeout:requestTimeout])
-        def apiUrl = authConfig.apiUrl
-        def username = authConfig.username
-        def password = authConfig.password
-        def apiVersion = authConfig.apiVersion ?: upcloudApiVersion
-        log.debug("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${JsonOutput.prettyPrint(JsonOutput.toJson(opts + [password: '*******']))}")
-        try {
-            def apiPath = "${apiVersion}${path}"
-            def fullUrl = "${apiUrl}/${apiPath}"
-            URIBuilder uriBuilder = new URIBuilder(fullUrl)
-            if(opts.query) {
-                opts.query?.each { k, v ->
-                    uriBuilder.addParameter(k, v)
-                }
-            }
-            HttpRequestBase request
-            switch(method) {
-                case 'HEAD':
-                    request = new HttpHead(uriBuilder.build())
-                    break
-                case 'PUT':
-                    request = new HttpPut(uriBuilder.build())
-                    break
-                case 'POST':
-                    request = new HttpPost(uriBuilder.build())
-                    break
-                case 'GET':
-                    request = new HttpGet(uriBuilder.build())
-                    break
-                case 'DELETE':
-                    request = new HttpDelete(uriBuilder.build())
-                    break
-                default:
-                    throw new Exception('method was not specified')
-            }
-            String creds = "${username}:${password}".toString()
-            String authHeader = "Basic ${creds.getBytes().encodeBase64().toString()}".toString()
-            request.addHeader(HttpHeaders.AUTHORIZATION, authHeader)
-            if(!opts.headers || !opts.headers['Content-Type']) {
-                request.addHeader('Content-Type', 'application/json')
-            }
-            opts.headers?.each { k, v ->
-                request.addHeader(k, v)
-            }
-            if(opts.body) {
-                HttpEntityEnclosingRequestBase postRequest = (HttpEntityEnclosingRequestBase)request
-                postRequest.setEntity(new StringEntity(opts.body.encodeAsJSON().toString()))
-            }
-            CloseableHttpResponse response = httpClient.execute(request)
-            try {
-                if(response.getStatusLine().getStatusCode() <= 399) {
-                    rtn.success = true
-                    HttpEntity entity = response.getEntity()
-                    if(entity) {
-                        def jsonString = EntityUtils.toString(entity)
-                        if(jsonString) {
-                            rtn.data = new groovy.json.JsonSlurper().parseText(jsonString)
-                        }
-                        log.debug "SUCCESS data to ${fullUrl}, results: ${JsonOutput.prettyPrint(jsonString ?: '')}"
-                    } else {
-                        rtn.data = null
-                    }
-                    rtn.success = true
-                } else {
-                    if(response.getEntity()) {
-                        def jsonString = EntityUtils.toString(response.getEntity())
-                        rtn.data = new groovy.json.JsonSlurper().parseText(jsonString)
-                        log.debug "FAILURE data to ${fullUrl}, results: ${JsonOutput.prettyPrint(jsonString ?: '')}"
-                    }
-                    rtn.success = false
-                    rtn.errorCode = response.getStatusLine().getStatusCode()?.toString()
-                    rtn.msg = rtn.data?.error?.'error_message' ?: rtn.data?.error
-                    log.warn("error: ${rtn.errorCode} - ${rtn.data}")
-                }
-            } catch(ex) {
-                log.error("Error occurred processing the response for ${fullUrl}", ex)
-            } finally {
-                if(response) {
-                    response.close()
-                }
-            }
-        } catch(e) {
-            log.error("${e} : stack: ${e.printStackTrace()}")
-            rtn.msg = e.message
-        }
-        return rtn
-    }
+//    static callApi(Map authConfig, String path, Map opts = [:], String method) {
+//        def rtn = [success:false, headers:[:]]
+//        def httpClient =  createHttpClient(authConfig + [timeout:requestTimeout])
+//        def apiUrl = authConfig.apiUrl
+//        def username = authConfig.username
+//        def password = authConfig.password
+//        def apiVersion = authConfig.apiVersion ?: upcloudApiVersion
+//        log.debug("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${JsonOutput.prettyPrint(JsonOutput.toJson(opts + [password: '*******']))}")
+//        try {
+//            def apiPath = "${apiVersion}${path}"
+//            def fullUrl = "${apiUrl}/${apiPath}"
+//            URIBuilder uriBuilder = new URIBuilder(fullUrl)
+//            if(opts.query) {
+//                opts.query?.each { k, v ->
+//                    uriBuilder.addParameter(k, v)
+//                }
+//            }
+//            HttpRequestBase request
+//            switch(method) {
+//                case 'HEAD':
+//                    request = new HttpHead(uriBuilder.build())
+//                    break
+//                case 'PUT':
+//                    request = new HttpPut(uriBuilder.build())
+//                    break
+//                case 'POST':
+//                    request = new HttpPost(uriBuilder.build())
+//                    break
+//                case 'GET':
+//                    request = new HttpGet(uriBuilder.build())
+//                    break
+//                case 'DELETE':
+//                    request = new HttpDelete(uriBuilder.build())
+//                    break
+//                default:
+//                    throw new Exception('method was not specified')
+//            }
+//            String creds = "${username}:${password}".toString()
+//            String authHeader = "Basic ${creds.getBytes().encodeBase64().toString()}".toString()
+//            request.addHeader(HttpHeaders.AUTHORIZATION, authHeader)
+//            if(!opts.headers || !opts.headers['Content-Type']) {
+//                request.addHeader('Content-Type', 'application/json')
+//            }
+//            opts.headers?.each { k, v ->
+//                request.addHeader(k, v)
+//            }
+//            if(opts.body) {
+//                HttpEntityEnclosingRequestBase postRequest = (HttpEntityEnclosingRequestBase)request
+//                postRequest.setEntity(new StringEntity(opts.body.encodeAsJSON().toString()))
+//            }
+//            CloseableHttpResponse response = httpClient.execute(request)
+//            try {
+//                if(response.getStatusLine().getStatusCode() <= 399) {
+//                    rtn.success = true
+//                    HttpEntity entity = response.getEntity()
+//                    if(entity) {
+//                        def jsonString = EntityUtils.toString(entity)
+//                        if(jsonString) {
+//                            rtn.data = new groovy.json.JsonSlurper().parseText(jsonString)
+//                        }
+//                        log.debug "SUCCESS data to ${fullUrl}, results: ${JsonOutput.prettyPrint(jsonString ?: '')}"
+//                    } else {
+//                        rtn.data = null
+//                    }
+//                    rtn.success = true
+//                } else {
+//                    if(response.getEntity()) {
+//                        def jsonString = EntityUtils.toString(response.getEntity())
+//                        rtn.data = new groovy.json.JsonSlurper().parseText(jsonString)
+//                        log.debug "FAILURE data to ${fullUrl}, results: ${JsonOutput.prettyPrint(jsonString ?: '')}"
+//                    }
+//                    rtn.success = false
+//                    rtn.errorCode = response.getStatusLine().getStatusCode()?.toString()
+//                    rtn.msg = rtn.data?.error?.'error_message' ?: rtn.data?.error
+//                    log.warn("error: ${rtn.errorCode} - ${rtn.data}")
+//                }
+//            } catch(ex) {
+//                log.error("Error occurred processing the response for ${fullUrl}", ex)
+//            } finally {
+//                if(response) {
+//                    response.close()
+//                }
+//            }
+//        } catch(e) {
+//            log.error("${e} : stack: ${e.printStackTrace()}")
+//            rtn.msg = e.message
+//        }
+//        return rtn
+//    }
 }

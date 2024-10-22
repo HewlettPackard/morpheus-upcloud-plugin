@@ -52,13 +52,13 @@ class VirtualMachinesSync {
 
                 def serverRecords = morpheusContext.async.computeServer.listIdentityProjections(
                         new DataQuery().withFilter("account", cloud.account)
-                        .withFilter("zone_id", cloud.id)
+                        .withFilter("zone", cloud.id)
                 )
                 log.info("SERVER RECORDS: ${serverRecords}")
 
                 SyncTask<ComputeServerIdentityProjection, Map, ComputeServer> syncTask = new SyncTask<>(serverRecords, apiResults.data.servers.server as Collection<Map>) as SyncTask<ComputeServerIdentityProjection, Map, ComputeServer>
                 syncTask.addMatchFunction { ComputeServerIdentityProjection imageObject, Map cloudItem ->
-                    imageObject.externalId == cloudItem?.uuid
+                    imageObject.externalId == cloudItem?.uuid.toString()
                 }.withLoadObjectDetailsFromFinder { List<SyncTask.UpdateItemDto<ComputeServerIdentityProjection, Map>> updateItems ->
                     morpheusContext.async.computeServer.listById(updateItems.collect { it.existingItem.id } as List<Long>)
                 }.onAdd { itemsToAdd ->
@@ -69,7 +69,7 @@ class VirtualMachinesSync {
                     removeMissingVirtualMachines(removeItems)
                 }.start()
             } else {
-                log.error "Error in getting images: ${apiResults}"
+                log.error "Error in getting vms: ${apiResults}"
             }
         } catch(e) {
             log.error("cacheVirtualMachines error: ${e}", e)
@@ -77,6 +77,7 @@ class VirtualMachinesSync {
     }
 
     private addMissingVirtualMachines(Collection<Map> addList, Observable<ServicePlanIdentityProjection> servicePlans) {
+        log.info("ADD MISSING VM: ${addList}")
         def authConfig = plugin.getAuthConfig(cloud)
         def serverType = new ComputeServerType(code: 'upcloudUnmanaged')
         def adds = []
@@ -92,8 +93,9 @@ class VirtualMachinesSync {
                 def addCapacityConfig = [maxCores:(cloudItem.'core_number' ?: 1), maxMemory:(cloudItem['memory_amount']?.toLong()*ComputeUtility.ONE_MEGABYTE),
                      maxStorage:0, usedStorage:0
                 ]
+                log.info("ADD VM SERVER DETAIL: ${cloudItem.uuid}")
                 def serverResults = UpcloudComputeUtility.getServerDetail(authConfig, cloudItem.uuid)
-
+                log.info("SERVER RESULTS: ${serverResults}")
                 if(serverResults.success == true && serverResults.server) {
                     //stats and ip address info
                     if(serverResults.server.vnc == 'on') {
@@ -141,6 +143,7 @@ class VirtualMachinesSync {
     }
 
     private updateMatchedVirtualMachines(List<SyncTask.UpdateItem<ComputeServer, Map>> updateList) {
+        log.info("UPDATE MATCHED VM")
         def saves = []
         def savesVolumes = [:]
         def savesCloudServers = [:]
@@ -363,14 +366,17 @@ class VirtualMachinesSync {
             }
 
             if(createList) {
+                log.info("CACHE CREATE")
                 morpheusContext.async.storageVolume.create(createList, server).blockingGet()
             }
 
             if(saveList) {
+                log.info("CACHE UPDATE")
                 morpheusContext.async.storageVolume.bulkSave(saveList).blockingGet()
             }
 
             if(removeList) {
+                log.info("CACHE REMOVE")
                 morpheusContext.async.storageVolume.remove(removeList, server, false).blockingGet()
             }
         } catch(e) {
