@@ -86,9 +86,9 @@ class VirtualMachinesSync {
         try {
             for(cloudItem in addList) {
                 def addConfig = [account:cloud.account, externalId:cloudItem.uuid, name:cloudItem.title, sshUsername:'root',
-                     apiKey:java.util.UUID.randomUUID(), status:'provisioned', hostname:cloudItem.hostname, poweredOn:(cloudItem.state == 'started'),
+                     apiKey:java.util.UUID.randomUUID(), status:'provisioned', hostname:cloudItem.hostname, //poweredOn:(cloudItem.state == 'started'),
                      powerState:(cloudItem.state == 'started' ? 'on' : 'off'), computeServerType:serverType, provision:false,
-                     singleTenant:true, zone:cloud, lvmEnabled:false, managed:false, discovered:true, serverType:'unmanaged'
+                     singleTenant:true, cloud:cloud, lvmEnabled:false, managed:false, discovered:true, serverType:'unmanaged'
                 ]
                 def addCapacityConfig = [maxCores:(cloudItem.'core_number' ?: 1), maxMemory:(cloudItem['memory_amount']?.toLong()*ComputeUtility.ONE_MEGABYTE),
                      maxStorage:0, usedStorage:0
@@ -120,15 +120,15 @@ class VirtualMachinesSync {
                         addCapacityConfig.maxStorage = maxStorage * ComputeUtility.ONE_GIGABYTE
                     }
                     //plan
-                    ServicePlan servicePlan = findServicePlanMatch(servicePlans, serverResults.server)
+                    ServicePlan servicePlan = new ServicePlan([id: findServicePlanMatch(servicePlans.toList().blockingGet(), serverResults.server).id])
                     if(servicePlan) {
                         addConfig.plan = servicePlan
                     }
                 }
 
                 def add = new ComputeServer(addConfig)
-                addCapacityConfig.server = add
-                add.capacityInfo = new ComputeCapacityInfo()(addCapacityConfig)
+                //addCapacityConfig.server = add
+                add.capacityInfo = new ComputeCapacityInfo(addCapacityConfig)
                 adds << add
                 serverAdds[add.id] = serverResults.volumes
             }
@@ -255,7 +255,7 @@ class VirtualMachinesSync {
                     }
                     //Set the plan on the server
                     if (!server.plan) {
-                        ServicePlan servicePlan = findServicePlanMatch(servicePlans, vm)
+                        ServicePlan servicePlan = new ServicePlan([id: findServicePlanMatch(servicePlans.toList().blockingGet(), vm).id])
                         if (servicePlan) {
                             server.plan = servicePlan
                             if (server.plan?.internalId == 'custom') {
@@ -300,7 +300,7 @@ class VirtualMachinesSync {
         return rtn
     }
 
-    private cacheVirtualMachineVolumes(ComputeServer server, List volumes) {
+    private cacheVirtualMachineVolumes(ComputeServer server, Map cloudServer, List volumes) {
         def saveRequired = false
         try {
             //ignore servers that are being resized
