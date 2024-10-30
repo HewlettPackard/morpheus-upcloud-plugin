@@ -77,7 +77,7 @@ class UpcloudApiService {
                 rtn.success = false
             }
         } catch (e) {
-            log.error "Error on listPlans: ${e}", e
+            log.error "Error on listPrices: ${e}", e
             rtn.success = false
         }
         return rtn

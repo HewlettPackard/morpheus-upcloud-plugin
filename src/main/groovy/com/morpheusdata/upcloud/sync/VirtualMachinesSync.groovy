@@ -51,10 +51,15 @@ class VirtualMachinesSync {
                 )
 
                 def serverRecords = morpheusContext.async.computeServer.listIdentityProjections(
-                        new DataQuery().withFilter("account", cloud.account)
-                        .withFilter("zone", cloud.id)
+                        new DataQuery().withFilter("account.id", cloud.account.id)
+                        .withFilter("zone.id", cloud.id)
                 )
+                log.info("CLOUD.ACCOUNT.ID: ${cloud.account.id}")
+                log.info("CLOUD.ID: ${cloud.id}")
                 log.info("SERVER RECORDS: ${serverRecords}")
+                serverRecords.subscribe() { it ->
+                    System.out.println("NAME: " + it.name + ", ID: " + it.id)
+                }
 
                 SyncTask<ComputeServerIdentityProjection, Map, ComputeServer> syncTask = new SyncTask<>(serverRecords, apiResults.data.servers.server as Collection<Map>) as SyncTask<ComputeServerIdentityProjection, Map, ComputeServer>
                 syncTask.addMatchFunction { ComputeServerIdentityProjection imageObject, Map cloudItem ->
@@ -246,7 +251,7 @@ class VirtualMachinesSync {
                                 server.capacityInfo.maxStorage = maxStorage
                                 doSave = true
                             }
-                            savesVolumes[server.id] = server.volume
+                            savesVolumes[server.id] = server.volumes
                         }
                     }
                     if (powerState != server.powerState) {
@@ -279,7 +284,7 @@ class VirtualMachinesSync {
                 cacheVirtualMachineVolumes(it, savesCloudServers[it.id], savesVolumes[it.id])
             }
         } catch(e) {
-            log.warn("error syncing existing vm ${server.id}: ${e}", e)
+            log.warn("error syncing existing vm: ${e}", e)
         }
     }
 

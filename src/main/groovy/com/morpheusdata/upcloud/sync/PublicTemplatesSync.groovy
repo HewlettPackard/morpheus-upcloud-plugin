@@ -43,7 +43,7 @@ class PublicTemplatesSync {
                         new DataQuery().withFilter("category", "upcloud.image.public.template")
                 )
                 log.info("imageRecords: ${imageRecords}")
-                SyncTask<VirtualImageIdentityProjection, Map, VirtualImage> syncTask = new SyncTask<>(imageRecords, imageResults as Collection<Map>) as SyncTask<VirtualImageIdentityProjection, Map, VirtualImage>
+                SyncTask<VirtualImageIdentityProjection, Map, VirtualImage> syncTask = new SyncTask<>(imageRecords, imageResults.data.storages.storage as Collection<Map>) as SyncTask<VirtualImageIdentityProjection, Map, VirtualImage>
                 syncTask.addMatchFunction { VirtualImageIdentityProjection imageObject, Map cloudItem ->
                     imageObject.externalId == cloudItem?.uuid
                 }.withLoadObjectDetailsFromFinder { List<SyncTask.UpdateItemDto<VirtualImageIdentityProjection, Map>> updateItems ->
@@ -112,15 +112,15 @@ class PublicTemplatesSync {
                 def existingItem = updateItem.existingItem
                 def layoutMatch = imageTypeMap.find{ imageType -> imageType.match == template.title }
                 if(layoutMatch?.map == true) {
-                    def layout = morpheusContext.async.instanceTypeLayout.list(
+                    def layout = morpheusContext.async.instanceTypeLayout.find(
                             new DataQuery().withFilter("code", "=", "${zoneCategory}.${layoutMatch.instanceType}")
                                     .withFilter("instanceVersion", "=", layoutMatch.version)
-                    )
+                    ).blockingGet()
                     if(layout) {
-                        def workloadType = morpheusContext.async.workloadType.list(
+                        def workloadType = morpheusContext.async.workloadType.find(
                                 new DataQuery().withFilter("code", "=", "${zoneCategory}.${layoutMatch.instanceType}")
                                         .withFilter("instanceVersion", "=", layoutMatch.version)
-                        )
+                        ).blockingGet()
 
                         def save = false
                         if(!existingItem.osType) {
@@ -155,14 +155,17 @@ class PublicTemplatesSync {
                         createTemplateLayout(existingItem, layoutMatch, template)
                     }
                 } else {
+                    log.info("LAYOUT MATCH: ${layoutMatch}")
                     def layout
                     if(layoutMatch) {
                         layout = morpheusContext.async.instanceTypeLayout.list(
                                 new DataQuery().withFilter("code", "=", "${zoneCategory}.${layoutMatch.instanceType}")
-                                        .withFilter("instanceVersion", "=", layoutMatch.version)
+                                        .withFilter("instance.version", "=", layoutMatch.version)
                                         .withFilter("enabled", "=", true)
-                        )
+                        ).toList().blockingGet()
+                        log.info("LAYOUT: ${layout}")
                     }
+
                     if(layout) {
                         layout.enabled = false
                         saves << layout
