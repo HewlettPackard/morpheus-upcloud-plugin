@@ -261,6 +261,7 @@ class VirtualMachinesSync {
                     //Set the plan on the server
                     if (!server.plan) {
                         ServicePlan servicePlan = new ServicePlan([id: findServicePlanMatch(servicePlans.toList().blockingGet(), vm).id])
+                        //log.info("SERVICE PLAN VM SYNC: ${servicePlan.id}, name: ${servicePlan.name}")
                         if (servicePlan) {
                             server.plan = servicePlan
                             if (server.plan?.internalId == 'custom') {
@@ -335,6 +336,7 @@ class VirtualMachinesSync {
                     addVolume.rootVolume = true
                 createList << addVolume
                 saveRequired = true
+                log.info("ADD VOLUME: ${addVolume.name}, ${addVolume.maxStorage}")
             }
             //updates
             syncLists.updateList?.each { updateMap ->

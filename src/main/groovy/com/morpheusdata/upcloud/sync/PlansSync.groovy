@@ -27,17 +27,17 @@ class PlansSync {
     UpcloudPlugin plugin
     private MorpheusContext morpheusContext
 
-    PlansSync(Cloud cloud, UpcloudPlugin plugin) {
+    PlansSync(Cloud cloud, UpcloudPlugin plugin, MorpheusContext morpheusContext) {
         this.cloud = cloud
         this.plugin = plugin
-        this.morpheusContext = plugin.morpheusContext
+        this.morpheusContext = morpheusContext
     }
 
     def execute() {
         try {
             def authConfig = plugin.getAuthConfig(cloud)
             def planListResults = UpcloudApiService.listPlans(authConfig)
-
+            log.info("UPCLOUD API PLANS: ${planListResults}")
             if (planListResults.success == true) {
                 def upcloudProvisionType = new ProvisionType(code:'upcloud')
                 def planListRecords = morpheusContext.async.servicePlan.listIdentityProjections(
@@ -46,7 +46,7 @@ class PlansSync {
                 )
 
                 planListResults << getCustomServicePlan()
-                SyncTask<ServicePlanIdentityProjection, Map, ServicePlan> syncTask = new SyncTask<>(planListRecords, planListResults as Collection<Map>) as SyncTask<ServicePlanIdentityProjection, Map, ServicePlan>
+                SyncTask<ServicePlanIdentityProjection, Map, ServicePlan> syncTask = new SyncTask<>(planListRecords, planListResults.data.plans.plan as Collection<Map>) as SyncTask<ServicePlanIdentityProjection, Map, ServicePlan>
                 syncTask.addMatchFunction { ServicePlanIdentityProjection morpheusItem, Map cloudItem ->
                     morpheusItem.externalId == cloudItem?.name
                 }.withLoadObjectDetailsFromFinder { List<SyncTask.UpdateItemDto<ServicePlanIdentityProjection, Map>> updateItems ->
@@ -150,9 +150,11 @@ class PlansSync {
 
     def removeMissingPlans(List removeList) {
         def saves = []
-        removeList?.each { ServicePlan it ->
-            it.active = false
-            it.deleted = true
+        removeList?.each { ServicePlanIdentityProjection it ->
+            ServicePlan servicePlan = morpheusContext.async.servicePlan.get(it.id).blockingGet()
+            //log.info("SERVICE PLAN: ${servicePlan}, name: ${servicePlan.name}, id: ${servicePlan.id}")
+            servicePlan.active = false
+            servicePlan.deleted = true
             saves << it
         }
         morpheusContext.async.servicePlan.bulkSave(saves).blockingGet()

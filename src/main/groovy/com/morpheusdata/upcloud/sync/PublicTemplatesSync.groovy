@@ -5,7 +5,6 @@ import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.util.SyncTask
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.ComputeServer
-import com.morpheusdata.model.ContainerType
 import com.morpheusdata.model.InstanceType
 import com.morpheusdata.model.InstanceTypeLayout
 import com.morpheusdata.model.OsType
@@ -181,20 +180,23 @@ class PublicTemplatesSync {
     }
 
     def removeMissingImages(List removeList) {
+        log.info("removeList: ${removeList}")
+
         def typeDeletes = []
         def setDeletes = []
         def layoutDeletes = []
         def imageDeletes = []
 
-        removeList?.each { VirtualImage morpheusItem ->
+        removeList?.each { VirtualImageIdentityProjection morpheusItem ->
+            VirtualImage virtualImage = morpheusContext.async.virtualImage.get(morpheusItem.id).blockingGet()
             def workloadTypes = morpheusContext.services.workloadType.list(
-                    new DataQuery().withFilter("virtualImage.id", "=", morpheusItem.id)
+                    new DataQuery().withFilter("virtualImage.id", "=", virtualImage.id)
             )
             workloadTypes?.each {
                 it.virtualImage = null
             }
             morpheusContext.services.workloadType.bulkSave(workloadTypes)
-
+            log.info("SAVED WORKLOAD TYPE")
             workloadTypes?.findAll{it.code.startsWith("upcloud.layout.public.template")}?.toArray().each { ctype ->
                 morpheusContext.services.workloadType.list(
                     new DataQuery().withFilter("workloadType.id", "=", ctype.id)
@@ -213,7 +215,7 @@ class PublicTemplatesSync {
                 }
                 typeDeletes << ctype
             }
-            imageDeletes << morpheusItem
+            imageDeletes << virtualImage
         }
         morpheusContext.async.virtualImage.bulkRemove(layoutDeletes).blockingGet()
         morpheusContext.async.virtualImage.bulkRemove(setDeletes).blockingGet()

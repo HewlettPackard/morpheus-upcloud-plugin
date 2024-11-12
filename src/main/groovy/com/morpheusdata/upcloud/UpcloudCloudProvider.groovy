@@ -25,6 +25,7 @@ import com.morpheusdata.model.StorageControllerType
 import com.morpheusdata.model.StorageVolumeType
 import com.morpheusdata.request.ValidateCloudRequest
 import com.morpheusdata.response.ServiceResponse
+import com.morpheusdata.upcloud.sync.PlansSync
 import com.morpheusdata.upcloud.sync.PublicTemplatesSync
 import com.morpheusdata.upcloud.sync.UserImagesSync
 import com.morpheusdata.upcloud.sync.VirtualMachinesSync
@@ -382,7 +383,7 @@ class UpcloudCloudProvider implements CloudProvider {
 	@Override
 	void refreshDaily(Cloud cloudInfo) {
 		try {
-			//(new PlansSync(this.plugin, cloudInfo)).execute()
+			(new PlansSync(cloudInfo, this.plugin, context)).execute()
 			(new PublicTemplatesSync(cloudInfo, this.plugin, context)).execute()
 		} catch(e) {
 			log.error("refreshZone error: ${e}", e)
