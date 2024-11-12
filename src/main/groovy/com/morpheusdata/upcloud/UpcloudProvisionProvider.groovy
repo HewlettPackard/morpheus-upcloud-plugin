@@ -5,24 +5,35 @@ import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
+import com.morpheusdata.core.util.HttpApiClient
+import com.morpheusdata.model.Account
+import com.morpheusdata.model.Cloud
+import com.morpheusdata.model.CloudRegion
+import com.morpheusdata.model.ComputeCapacityInfo
 import com.morpheusdata.model.ComputeServer
 import com.morpheusdata.model.Icon
+import com.morpheusdata.model.NetworkProxy
 import com.morpheusdata.model.OptionType
+import com.morpheusdata.model.ProxyConfiguration
 import com.morpheusdata.model.ServicePlan
 import com.morpheusdata.model.StorageVolumeType
+import com.morpheusdata.model.VirtualImage
 import com.morpheusdata.model.Workload
 import com.morpheusdata.model.provisioning.WorkloadRequest
 import com.morpheusdata.response.PrepareWorkloadResponse
 import com.morpheusdata.response.ProvisionResponse
 import com.morpheusdata.response.ServiceResponse
+import com.morpheusdata.upcloud.services.UpcloudApiService
+import groovy.util.logging.Slf4j
 
+@Slf4j
 class UpcloudProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider {
 	public static final String PROVISION_PROVIDER_CODE = 'upcloud.provision'
 
 	protected MorpheusContext context
-	protected Plugin plugin
+	protected UpcloudPlugin plugin
 
-	public UpcloudProvisionProvider(Plugin plugin, MorpheusContext ctx) {
+	public UpcloudProvisionProvider(UpcloudPlugin plugin, MorpheusContext ctx) {
 		super()
 		this.@context = ctx
 		this.@plugin = plugin
@@ -163,13 +174,66 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse<ProvisionResponse> runWorkload(Workload workload, WorkloadRequest workloadRequest, Map opts) {
-		// TODO: this is where you will implement the work to create the workload in your cloud environment
-		return new ServiceResponse<ProvisionResponse>(
-			true,
-			null, // no message
-			null, // no errors
-			new ProvisionResponse(success:true)
-		)
+		log.debug "runWorkload ${workload.configs} ${opts}"
+
+		ProvisionResponse provisionResponse = new ProvisionResponse(success: true, installAgent: false)
+		ComputeServer server = workload.server
+		Cloud cloud = server.cloud
+		def imageId
+		def sourceVmId
+		def virtualImage
+		def imageFormat = opts.workloadConfig.imageType ?: 'default'
+
+		try {
+			def containerConfig = workload.getConfigMap()
+			def rootVolume = server.volumes?.find { it.rootVolume == true }
+			//def networkId = containerConfig.networkId
+			//def network = context.async.network.get(networkId).blockingGet()
+			//def sourceWorkload = context.async.workload.get(opts.cloneContainerId).blockingGet()
+			//def cloneContainer = opts.cloneContainerId ? sourceWorkload : null
+			def morphDataStores = context.async.cloud.datastore.listById([containerConfig.datastoreId?.toLong()])
+					.toMap { it.id.toLong() }.blockingGet()
+			def datastore = rootVolume?.datastore ?: morphDataStores[containerConfig.datastoreId?.toLong()]
+			def authConfigMap = plugin.getAuthConfig(cloud)
+			if (containerConfig.imageId || containerConfig.template || server.sourceImage?.id) {
+				def virtualImageId = (containerConfig.imageId?.toLong() ?: containerConfig.template?.toLong() ?: server.sourceImage.id)
+				virtualImage = context.async.virtualImage.get(virtualImageId).blockingGet()
+				imageId = virtualImage.locations.find { it.refType == "ComputeZone" && it.refId == cloud.id }?.externalId
+				if (!imageId) { //If its userUploaded and still needs uploaded
+					def primaryNetwork = server.interfaces?.find { it.network }?.network
+					def cloudFiles = context.async.virtualImage.getVirtualImageFiles(virtualImage).blockingGet()
+					def imageFile = cloudFiles?.find { cloudFile -> cloudFile.name.toLowerCase().indexOf('.' + imageFormat) > -1 }
+					def containerImage =
+							[
+									name         : virtualImage.name,
+									imageSrc     : imageFile?.getURL(),
+									minDisk      : virtualImage.minDisk ?: 5,
+									minRam       : virtualImage.minRam ?: (512 * ComputeUtility.ONE_MEGABYTE),
+									tags         : 'morpheus, ubuntu',
+									imageType    : 'disk_image',
+									containerType: 'vhd',
+									cloudFiles   : cloudFiles,
+									imageFile    : imageFile,
+									imageSize    : imageFile?.contentLength
+							]
+					def imageConfig =
+							[
+									zone      : cloud,
+									image     : containerImage,
+									name      : virtualImage.name,
+									datastore : datastore,
+									network   : primaryNetwork,
+									osTypeCode: virtualImage?.osType?.code
+							]
+					imageConfig.authConfig = authConfigMap
+					def imageResults = XenComputeUtility.insertTemplate(imageConfig)
+					log.debug("insertTemplate: imageResults: ${imageResults}")
+					if (imageResults.success == true) {
+						imageId = imageResults.imageId
+					}
+				}
+			}
+		}
 	}
 
 	/**
@@ -308,5 +372,49 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	@Override
 	String getName() {
 		return 'Upcloud Provisioning'
+	}
+
+	protected insertVm(Map runConfig, ProvisionResponse provisionResponse, Map opts) {
+		log.debug("insertVm runConfig: {}", runConfig)
+		def taskResults = [success:false]
+		ComputeServer server = runConfig.server
+		Account account = server.account
+		opts.createUserList = runConfig.userConfig.createUsers
+
+		//save server
+		runConfig.server = saveAndGet(server)
+		log.debug("create server: ${runConfig}")
+
+		//cloud init
+		if(runConfig.virtualImage?.isCloudInit) {
+			runConfig.cloudConfig = morpheusComputeService.buildScriptUserData(runConfig.platform, runConfig.userConfig.userList, runConfig.userConfig.keyList, cloudConfigOpts)
+		} else {
+			opts.commandList = [morpheusComputeService.buildScriptUserData(runConfig.platform, runConfig.userConfig.userList, runConfig.userConfig.keyList, cloudConfigOpts)]
+		}
+
+		//set install agent
+		runConfig.installAgent = runConfig.noAgent && server.cloud.agentMode != 'cloudInit'
+
+		def createResults = UpcloudApiService.createServer(runConfig.authConfig, runConfig)
+		log.info("create server results success ${createResults.success}")
+		log.debug("Upcloud Create Server Results: {}",createResults)
+		if(createResults.success == true && createResults.server) {
+			server.externalId = createResults.externalId
+			server.powerState = 'on'
+			server.region = new CloudRegion(code: server.resourcePool.regionCode)
+			provisionResponse.externalId = server.externalId
+			server = saveAndGet(server)
+			runConfig.server = server
+		}
+
+
+	}
+
+	protected ComputeServer saveAndGet(ComputeServer server) {
+		def saveSuccessful = context.async.computeServer.save([server]).blockingGet()
+		if(!saveSuccessful) {
+			log.warn("Error saving server: ${server?.id}" )
+		}
+		return context.async.computeServer.get(server.id).blockingGet()
 	}
 }

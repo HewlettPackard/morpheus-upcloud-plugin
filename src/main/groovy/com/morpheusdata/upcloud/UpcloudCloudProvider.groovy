@@ -33,9 +33,9 @@ class UpcloudCloudProvider implements CloudProvider {
 	public static final String CLOUD_PROVIDER_CODE = 'upcloud.cloud'
 
 	protected MorpheusContext context
-	protected Plugin plugin
+	protected UpcloudPlugin plugin
 
-	public UpcloudCloudProvider(Plugin plugin, MorpheusContext ctx) {
+	public UpcloudCloudProvider(UpcloudPlugin plugin, MorpheusContext ctx) {
 		super()
 		this.@plugin = plugin
 		this.@context = ctx
