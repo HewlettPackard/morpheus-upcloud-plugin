@@ -217,10 +217,10 @@ class PublicTemplatesSync {
             }
             imageDeletes << virtualImage
         }
-        morpheusContext.async.virtualImage.bulkRemove(layoutDeletes).blockingGet()
-        morpheusContext.async.virtualImage.bulkRemove(setDeletes).blockingGet()
-        morpheusContext.async.virtualImage.bulkRemove(typeDeletes).blockingGet()
-        morpheusContext.async.virtualImage.bulkRemove(imageDeletes).blockingGet()
+        morpheusContext.async.instanceTypeLayout.remove(layoutDeletes).blockingGet()
+        morpheusContext.async.workloadType.remove(setDeletes).blockingGet()
+        morpheusContext.async.workloadType.remove(typeDeletes).blockingGet()
+        morpheusContext.async.virtualImage.remove(imageDeletes).blockingGet()
     }
 
 
