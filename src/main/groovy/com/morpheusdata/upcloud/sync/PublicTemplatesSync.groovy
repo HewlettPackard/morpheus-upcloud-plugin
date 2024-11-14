@@ -71,7 +71,7 @@ class PublicTemplatesSync {
                         category: "upcloud.image.public.template",
                         owner: cloud.owner,
                         name: cloudItem.title,
-                        zoneType: 'upcloud',
+                        //zoneType: 'upcloud',
                         code: "upcloud.image.public.template.${cloudItem.uuid}",
                         isCloudInit: false,
                         imageType: 'qcow2',
@@ -82,7 +82,7 @@ class PublicTemplatesSync {
                         minDisk: cloudItem.size
                     ]
 
-                imageConfig.osType = OsType.findByCode(cloudItem.title.startsWith("Windows ") ? 'windows' : 'linux')
+                imageConfig.osType = new OsType(code:(cloudItem.title.startsWith("Windows ") ? 'windows' : 'linux'))
                 if(imageConfig.platform == 'windows') {
                     imageConfig.sshUsername = 'clouduser'
                 }
@@ -123,7 +123,7 @@ class PublicTemplatesSync {
 
                         def save = false
                         if(!existingItem.osType) {
-                            existingItem.osType = OsType.findByCode(template.title.startsWith("Windows ") ? 'windows' : 'linux')
+                            existingItem.osType = new OsType(code:template.title.startsWith("Windows ") ? 'windows' : 'linux')
                             save = true
                         }
                         if(existingItem.platform == 'windows' && !existingItem.sshUsername) {
@@ -172,7 +172,7 @@ class PublicTemplatesSync {
                 }
             }
             if(saves) {
-                morpheusContext.async.virtualImage.bulkSave(saves).blockingGet()
+                morpheusContext.async.instanceTypeLayout.bulkSave(saves).blockingGet()
             }
         } catch(e) {
             log.error("updateMatchedImages error: ${e}", e)
@@ -198,11 +198,11 @@ class PublicTemplatesSync {
             morpheusContext.services.workloadType.bulkSave(workloadTypes)
             log.info("SAVED WORKLOAD TYPE")
             workloadTypes?.findAll{it.code.startsWith("upcloud.layout.public.template")}?.toArray().each { ctype ->
-                morpheusContext.services.workloadType.list(
+                morpheusContext.async.workload.typeSet.list(
                     new DataQuery().withFilter("workloadType.id", "=", ctype.id)
                 ).each{cset ->
                     morpheusContext.services.instanceTypeLayout.list(
-                        new DataQuery().withFilter("layout.id", "=", cset.id)
+                        new DataQuery().withFilter("workloads", "=", cset)
                     ).each{layout ->
                         morpheusContext.services.instance.list(
                                 new DataQuery().withFilter("layout", "=", layout)
@@ -217,10 +217,16 @@ class PublicTemplatesSync {
             }
             imageDeletes << virtualImage
         }
+        log.info("BEFORE REMOVE API CALLS")
         morpheusContext.async.instanceTypeLayout.remove(layoutDeletes).blockingGet()
+        log.info("REMOVED LAYOUTS")
         morpheusContext.async.workloadType.remove(setDeletes).blockingGet()
+        log.info("REMOVED WORKLOAD SETS")
         morpheusContext.async.workloadType.remove(typeDeletes).blockingGet()
+        log.info("REMOVED TYPES")
         morpheusContext.async.virtualImage.remove(imageDeletes).blockingGet()
+        log.info("REMOVED IMAGES")
+
     }
 
 
@@ -253,7 +259,7 @@ class PublicTemplatesSync {
         saves << layout
         //instanceTypeService.setInstanceTypeLayoutToScale(layout)
 
-        morpheusContext.async.virtualImage.bulkSave(saves).blockingGet()
+        morpheusContext.async.instanceTypeLayout.bulkSave(saves).blockingGet()
 
     }
 
