@@ -242,9 +242,11 @@ class PlansSync {
             }.onDelete { List<AccountPriceSetIdentityProjection> deleteList ->
                 def deleteIds = deleteList.collect { it.id }
                 List<ServicePlanPriceSet> servicePlanPriceSetDeleteList = morpheusContext.async.servicePlanPriceSet.listByAccountPriceSetIds(deleteIds).toList().blockingGet()
-                Boolean servicePlanPriceSetDeleteResult = morpheusContext.async.servicePlanPriceSet.remove(servicePlanPriceSetDeleteList).blockingGet()
+                log.info("BULK REMOVE 245 SERVICE PLAN PRICE SET")
+                Boolean servicePlanPriceSetDeleteResult = morpheusContext.async.servicePlanPriceSet.bulkRemove(servicePlanPriceSetDeleteList).blockingGet()
                 if(servicePlanPriceSetDeleteResult) {
-                    morpheusContext.async.accountPriceSet.remove(deleteList).blockingGet()
+                    log.info("BULK REMOVE 248 ACCOUNT PRICE SET")
+                    morpheusContext.async.accountPriceSet.bulkRemove(deleteList).blockingGet()
                 } else {
                     log.error("Failed to delete ServicePlanPriceSets associated to AccountPriceSet")
                 }
@@ -273,7 +275,8 @@ class PlansSync {
                     priceSyncTask.addMatchFunction { AccountPriceIdentityProjection projection, AccountPrice apiItem ->
                         projection.code == apiItem.code
                     }.onDelete { List<AccountPriceIdentityProjection> deleteList ->
-                        morpheusContext.async.accountPrice.remove(deleteList).blockingGet()
+                        log.info("BULK REMOVE 278 ACCOUNT PRICE SET")
+                        morpheusContext.async.accountPrice.bulkRemove(deleteList).blockingGet()
                     }.onAdd { createList ->
                         while(createList.size() > 0) {
                             List chunkedList = createList.take(50)
@@ -430,7 +433,8 @@ class PlansSync {
         syncTask.addMatchFunction { ServicePlanPriceSetIdentityProjection projection, ServicePlanPriceSet cloudItem ->
             return (projection.priceSet.code == cloudItem.priceSet.code && projection.servicePlan.code == cloudItem.servicePlan.code)
         }.onDelete { List<ServicePlanPriceSetIdentityProjection> deleteList ->
-            morpheusContext.async.servicePlanPriceSet.remove(deleteList).blockingGet()
+            log.info("BULK REMOVE 436 SERVICE PLAN PRICE SET")
+            morpheusContext.async.servicePlanPriceSet.bulkRemove(deleteList).blockingGet()
         }.onAdd { createList ->
             while(createList.size() > 0) {
                 List chunkedList = createList.take(50)

@@ -199,7 +199,7 @@ class PublicTemplatesSync {
             log.info("SAVED WORKLOAD TYPE")
             workloadTypes?.findAll{it.code.startsWith("upcloud.layout.public.template")}?.toArray().each { ctype ->
                 morpheusContext.async.workload.typeSet.list(
-                    new DataQuery().withFilter("workloadType.id", "=", ctype.id)
+                    new DataQuery().withFilter("workloadType", "=", ctype)
                 ).each{cset ->
                     morpheusContext.services.instanceTypeLayout.list(
                         new DataQuery().withFilter("workloads", "=", cset)
@@ -217,14 +217,19 @@ class PublicTemplatesSync {
             }
             imageDeletes << virtualImage
         }
+        log.info("LAYOUT DELETES: ${layoutDeletes}")
+        log.info("SET DELETES: ${setDeletes}")
+        log.info("TYPE DELETES: ${typeDeletes}")
+        log.info("IMAGE DELETES: ${imageDeletes}")
+
         log.info("BEFORE REMOVE API CALLS")
-        morpheusContext.async.instanceTypeLayout.remove(layoutDeletes).blockingGet()
+        morpheusContext.async.instanceTypeLayout.bulkRemove(layoutDeletes).blockingGet()
         log.info("REMOVED LAYOUTS")
-        morpheusContext.async.workloadType.remove(setDeletes).blockingGet()
-        log.info("REMOVED WORKLOAD SETS")
-        morpheusContext.async.workloadType.remove(typeDeletes).blockingGet()
-        log.info("REMOVED TYPES")
-        morpheusContext.async.virtualImage.remove(imageDeletes).blockingGet()
+        morpheusContext.async.workload.typeSet.bulkRemove(setDeletes).blockingGet()
+        log.info("REMOVED WORKLOAD TYPE SETS")
+        morpheusContext.async.workloadType.bulkRemove(typeDeletes).blockingGet()
+        log.info("REMOVED WORKLOAD TYPES")
+        morpheusContext.async.virtualImage.bulkRemove(imageDeletes).blockingGet()
         log.info("REMOVED IMAGES")
 
     }
@@ -252,10 +257,11 @@ class PublicTemplatesSync {
         def layoutConfig = [code:zoneCategory + '.' + typeMatch.instanceType,
                             name:'UpCloud ' + typeMatch.name, externalId:image.externalId,
                             sortOrder:typeMatch.sortOrder, instanceVersion:typeMatch.version, description:'Provision upcloud ' + typeMatch.instanceType + ' vm',
-                            provisionType:provisionType, instanceType:instanceType, serverCount:1, portCount:workloadType.containerPorts?.size() ?: 0,
+                            provisionType:provisionType, instanceType:instanceType, serverCount:1, portCount:workloadType.ports?.size() ?: 0,
                             serverType:'vm', supportsConvertToManaged:true, syncSource:'external']
         def layout = new InstanceTypeLayout(layoutConfig)
-        layout.workloads.add(workloadTypeSet)
+        layout.workloads = layout.workloads ? layout.workloads.add(workloadTypeSet) : [workloadTypeSet]
+        //layout.workloads.add(workloadTypeSet)
         saves << layout
         //instanceTypeService.setInstanceTypeLayoutToScale(layout)
 
