@@ -110,17 +110,22 @@ class PublicTemplatesSync {
                 def template = updateItem.masterItem
                 def existingItem = updateItem.existingItem
                 def layoutMatch = imageTypeMap.find{ imageType -> imageType.match == template.title }
+                log.info("LAYOUT MATCH 113: ${layoutMatch}, ${layoutMatch?.map}")
+                log.info("CODE: ${zoneCategory}.${layoutMatch?.instanceType}")
+                log.info("VERSION: ${layoutMatch?.version}")
                 if(layoutMatch?.map == true) {
+                    log.info("Matching up : ${template.title}")
                     def layout = morpheusContext.async.instanceTypeLayout.find(
                             new DataQuery().withFilter("code", "=", "${zoneCategory}.${layoutMatch.instanceType}")
                                     .withFilter("instanceVersion", "=", layoutMatch.version)
                     ).blockingGet()
+                    log.info("LAYOUT 120: ${layout}")
                     if(layout) {
                         def workloadType = morpheusContext.async.workloadType.find(
                                 new DataQuery().withFilter("code", "=", "${zoneCategory}.${layoutMatch.instanceType}")
-                                        .withFilter("instanceVersion", "=", layoutMatch.version)
+                                        .withFilter("containerVersion", "=", layoutMatch.version)
                         ).blockingGet()
-
+                        log.info("WORKLOAD TYPE 126: ${workloadType}")
                         def save = false
                         if(!existingItem.osType) {
                             existingItem.osType = new OsType(code:template.title.startsWith("Windows ") ? 'windows' : 'linux')
@@ -154,15 +159,14 @@ class PublicTemplatesSync {
                         createTemplateLayout(existingItem, layoutMatch, template)
                     }
                 } else {
-                    log.info("LAYOUT MATCH: ${layoutMatch}")
                     def layout
                     if(layoutMatch) {
-                        layout = morpheusContext.async.instanceTypeLayout.list(
+                        layout = morpheusContext.async.instanceTypeLayout.find(
                                 new DataQuery().withFilter("code", "=", "${zoneCategory}.${layoutMatch.instanceType}")
-                                        .withFilter("instance.version", "=", layoutMatch.version)
+                                        .withFilter("instanceVersion", "=", layoutMatch.version)
                                         .withFilter("enabled", "=", true)
-                        ).toList().blockingGet()
-                        log.info("LAYOUT: ${layout}")
+                        ).blockingGet()
+                        log.info("LAYOUT 168: ${layout}")
                     }
 
                     if(layout) {
@@ -199,15 +203,16 @@ class PublicTemplatesSync {
             log.info("SAVED WORKLOAD TYPE")
             workloadTypes?.findAll{it.code.startsWith("upcloud.layout.public.template")}?.toArray().each { ctype ->
                 morpheusContext.async.workload.typeSet.list(
-                    new DataQuery().withFilter("workloadType", "=", ctype)
-                ).each{cset ->
+                    new DataQuery().withFilter("workloadType.id", "=", ctype.id)
+                ).toList().each{ WorkloadTypeSet cset ->
                     morpheusContext.services.instanceTypeLayout.list(
-                        new DataQuery().withFilter("workloads", "=", cset)
-                    ).each{layout ->
+                        new DataQuery().withFilter("workloads.id", "=", cset.id)
+                    ).toList().each{layout ->
                         morpheusContext.services.instance.list(
-                                new DataQuery().withFilter("layout", "=", layout)
-                        ).each {instance ->
+                                new DataQuery().withFilter("layout.id", "=", layout.id)
+                        ).toList().each {instance ->
                                 instance.layout = null
+                                morpheusContext.async.instance.save(instance).blockingGet()
                         }
                         layoutDeletes << layout
                     }
