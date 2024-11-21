@@ -92,7 +92,7 @@ class PublicTemplatesSync {
 
                 def layoutMatch = imageTypeMap.find{ imageType -> imageType.match == cloudItem.title}
                 if(layoutMatch?.map == true) {
-                    createTemplateLayout(add, layoutMatch, cloudItem)
+                    createTemplateLayout(newImage, layoutMatch, cloudItem)
                 }
             }
             morpheusContext.async.virtualImage.bulkCreate(saves).blockingGet()
@@ -110,6 +110,7 @@ class PublicTemplatesSync {
                 def template = updateItem.masterItem
                 def existingItem = updateItem.existingItem
                 def layoutMatch = imageTypeMap.find{ imageType -> imageType.match == template.title }
+                log.info("TEMPLATE NAME: ${template.title}")
                 log.info("LAYOUT MATCH 113: ${layoutMatch}, ${layoutMatch?.map}")
                 log.info("CODE: ${zoneCategory}.${layoutMatch?.instanceType}")
                 log.info("VERSION: ${layoutMatch?.version}")
@@ -241,42 +242,54 @@ class PublicTemplatesSync {
 
 
     def createTemplateLayout(VirtualImage image, Map typeMatch, Map imageConfig) {
-        def saves = []
+        log.info("CREATE TEMPLATE LAYOUT image: ${image.name}")
         def zoneCategory = "upcloud.layout.public.template"
         def instanceType = new InstanceType(code:typeMatch.instanceType)
+
         //container type
         def provisionType = new ProvisionType(code:'upcloud')
+        log.info("INSTANCE TYPE: ${instanceType}")
+        log.info("PROVISION TYPE: ${provisionType}")
+        log.info("TYPEMATCH: ${typeMatch}")
         def workloadTypeConfig = [code:zoneCategory + '.' + typeMatch.instanceType, shortName:typeMatch.instanceType,
                                    name:'UpCloud ' + typeMatch.name, containerVersion:typeMatch.version, repositoryImage:'image', entryPoint:'/bin/bash',
                                    statTypeCode:typeMatch.statType, logTypeCode:typeMatch.logType, virtualImage:image,
                                    checkTypeCode:typeMatch.checkType, commEnabled:typeMatch.commEnabled, commType:typeMatch.commType, commPort:typeMatch.commPort,
-                                   category:typeMatch.instanceType, provisionType:provisionType, syncSource:'external']
+                                   category:typeMatch.instanceType, provisionType:provisionType, syncSource:'external',
+                                   uuid: java.util.UUID.randomUUID(), hasSettings: false, userDeploy: true, showServerLogs: false]
         def workloadType = new WorkloadType(workloadTypeConfig)
-        saves << workloadType
+        log.info("WORKLOAD TYPE: ${workloadType}")
+        morpheusContext.async.workloadType.create(workloadType).blockingGet()
+        log.info("SAVED WORKLOADTYPE")
+
         //type set
         def workloadTypeSetConfig = [code:zoneCategory + '.' + typeMatch.instanceType + '.set',
-                                      workloadType:workloadType, priorityOrder:0, containerCount:1]
+                                      workloadType:workloadType, priorityOrder:0, containerCount:1,
+                                      dynamicCount: false]
         def workloadTypeSet = new WorkloadTypeSet(workloadTypeSetConfig)
-        saves << workloadTypeSet
+        morpheusContext.async.workload.typeSet.create(workloadTypeSet).blockingGet()
+        log.info("SAVED WORKLOAD TYPE SET")
+
         //layout
         def layoutConfig = [code:zoneCategory + '.' + typeMatch.instanceType,
                             name:'UpCloud ' + typeMatch.name, externalId:image.externalId,
                             sortOrder:typeMatch.sortOrder, instanceVersion:typeMatch.version, description:'Provision upcloud ' + typeMatch.instanceType + ' vm',
                             provisionType:provisionType, instanceType:instanceType, serverCount:1, portCount:workloadType.ports?.size() ?: 0,
-                            serverType:'vm', supportsConvertToManaged:true, syncSource:'external']
+                            serverType:'vm', supportsConvertToManaged:true, syncSource:'external',
+                            creatable: true, uuid: java.util.UUID.randomUUID(), systemLayout: false, enabled: true]
         def layout = new InstanceTypeLayout(layoutConfig)
         layout.workloads = layout.workloads ? layout.workloads.add(workloadTypeSet) : [workloadTypeSet]
         //layout.workloads.add(workloadTypeSet)
-        saves << layout
         //instanceTypeService.setInstanceTypeLayoutToScale(layout)
-
-        morpheusContext.async.instanceTypeLayout.bulkSave(saves).blockingGet()
-
+        morpheusContext.async.instanceTypeLayout.create(layout).blockingGet()
+        log.info("SAVED LAYOUT")
     }
 
 
     static imageTypeMap = [
 
+            [match:'CentOS Stream 9', name:'CentOS Stream 9', instanceType:'centos', sortOrder:99, version:'9-stream', os:'linux', map:true,
+             checkType:'vmCheck', statType:'centos', logType:'centos', commType: 'SSH', commPort: 22, commEnabled: true],
             [match:'CentOS Stream 8', name:'CentOS Stream 8', instanceType:'centos', sortOrder:89, version:'8-stream', os:'linux', map:true,
              checkType:'vmCheck', statType:'centos', logType:'centos', commType: 'SSH', commPort: 22, commEnabled: true],
             [match:'CentOS 7', name:'CentOS 7', instanceType:'centos', version:'7.9', sortOrder:79, os:'linux', map:true,
@@ -292,6 +305,11 @@ class PublicTemplatesSync {
              checkType:'vmCheck', statType:'ubuntu', logType:'ubuntu', commType: 'SSH', commPort: 22, commEnabled: true],
             [match:'Ubuntu Server 14.04 LTS (Trusty Tahr)', name:'Ubuntu 14.04',sortOrder: 14, instanceType:'ubuntu', version:'14.04', os:'linux', map:true,
              checkType:'vmCheck', statType:'ubuntu', logType:'ubuntu', commType: 'SSH', commPort: 22, commEnabled: true],
+            [match:'Ubuntu Server 24.04 LTS (Noble Numbat)', name:'Ubuntu 24.04',sortOrder: 24, instanceType:'ubuntu', version:'24.04', os:'linux', map:true,
+             checkType:'vmCheck', statType:'ubuntu', logType:'ubuntu', commType: 'SSH', commPort: 22, commEnabled: true],
+
+            [match:'Debian GNU/Linux 12 (Bookworm)', name:'Debian 12', sortOrder: 12, instanceType:'debian', version:'12', os:'linux', map:true,
+             checkType:'vmCheck', statType:'debian', logType:'debian', commType: 'SSH', commPort: 22, commEnabled: true],
             [match:'Debian GNU/Linux 11 (Bullseye)', name:'Debian 11', sortOrder: 11, instanceType:'debian', version:'11', os:'linux', map:true,
              checkType:'vmCheck', statType:'debian', logType:'debian', commType: 'SSH', commPort: 22, commEnabled: true],
             [match:'Debian GNU/Linux 10 (Buster)', name:'Debian 10', sortOrder:10, instanceType:'debian', version:'10.10', os:'linux', map:true,
@@ -302,6 +320,7 @@ class PublicTemplatesSync {
              checkType:'vmCheck', statType:'debian', logType:'debian', commType: 'SSH', commPort: 22, commEnabled: true],
             [match:'Debian GNU/Linux 7.8 (Wheezy)', name:'Debian 7', sortOrder:7, instanceType:'debian', version:'', os:'linux', map:false,
              checkType:'vmCheck', statType:'debian', logType:'debian', commType: 'SSH', commPort: 22, commEnabled: true],
+
             [match:'Windows Server 2016 Standard', name:'Windows Server 2016', sortOrder:2016, instanceType:'windows', version:'2016', os:'windows', map:false,
              checkType:'vmCheck', statType:'windows', logType:'windows', commType: 'RDP', commEnabled: true, commPort: 3389],
             [match:'Windows Server 2019 Datacenter', name:'Windows Server 2019 Datacenter', sortOrder:2019, instanceType:'windows', version:'2019 datacenter', os:'windows', map:false,
@@ -309,7 +328,21 @@ class PublicTemplatesSync {
             [match:'Windows Server 2019 Standard', name:'Windows Server 2019', sortOrder:2019, instanceType:'windows', version:'2019', os:'windows', map:false,
              checkType:'vmCheck', statType:'windows', logType:'windows', commType: 'RDP', commEnabled: true, commPort: 3389],
             [match:'Windows Server 2016 Datacenter', name:'Windows Server 2016 Datacenter', sortOrder:2016, instanceType:'windows', version:'2016 datacenter', os:'windows', map:false,
-             checkType:'vmCheck', statType:'windows', logType:'windows', commType: 'RDP', commEnabled: true, commPort: 3389]
+             checkType:'vmCheck', statType:'windows', logType:'windows', commType: 'RDP', commEnabled: true, commPort: 3389],
+            [match:'Windows Server 2022 Datacenter', name:'Windows Server 2022 Datacenter', sortOrder:2022, instanceType:'windows', version:'2022 datacenter', os:'windows', map:false,
+             checkType:'vmCheck', statType:'windows', logType:'windows', commType: 'RDP', commEnabled: true, commPort: 3389],
+            [match:'Windows Server 2022 Standard', name:'Windows Server 2022', sortOrder:2022, instanceType:'windows', version:'2022', os:'windows', map:false,
+             checkType:'vmCheck', statType:'windows', logType:'windows', commType: 'RDP', commEnabled: true, commPort: 3389],
+
+            [match:'AlmaLinux 8', name:'AlmaLinux 8', sortOrder:8, instanceType:'almalinux', version:'8', os:'linux', map:true,
+             checkType:'vmCheck', statType:'centos', logType:'centos', commType: 'SSH', commPort: 22, commEnabled: true],
+            [match:'AlmaLinux 9', name:'AlmaLinux 9', sortOrder:9, instanceType:'almalinux', version:'9', os:'linux', map:true,
+             checkType:'vmCheck', statType:'centos', logType:'centos', commType: 'SSH', commPort: 22, commEnabled: true],
+
+            [match:'Rocky Linux 8', name:'Rocky Linux 8', sortOrder:8, instanceType:'rocky', version:'8', os:'linux', map:true,
+             checkType:'vmCheck', statType:'centos', logType:'centos', commType: 'SSH', commPort: 22, commEnabled: true],
+            [match:'Rocky Linux 9', name:'Rocky Linux 9', sortOrder:9, instanceType:'rocky', version:'9', os:'linux', map:true,
+             checkType:'vmCheck', statType:'centos', logType:'centos', commType: 'SSH', commPort: 22, commEnabled: true],
 
     ]
 }
