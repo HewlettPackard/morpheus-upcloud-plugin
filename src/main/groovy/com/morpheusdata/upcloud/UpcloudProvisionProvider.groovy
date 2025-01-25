@@ -222,7 +222,23 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse stopWorkload(Workload workload) {
-		return ServiceResponse.success()
+		def rtn = ServiceResponse.prepare()
+		try {
+			if(workload.server?.externalId) {
+				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
+				def stopResults = UpcloudProvisionProvider.stopServer(authConfigMap, workload.server.externalId)
+				if(stopResults.success == true) {
+					rtn.success = true
+				}
+			} else {
+				rtn.success = true
+				rtn.msg = 'stopWorkload: vm not found'
+			}
+		} catch (e) {
+			log.error("stopContainer error: ${e}", e)
+			rtn.msg = 'stopWorkload: error stopping workload'
+		}
+		return rtn
 	}
 
 	/**
@@ -232,7 +248,27 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse startWorkload(Workload workload) {
-		return ServiceResponse.success()
+		log.debug("startWorkload: ${workload.id}")
+		def rtn = ServiceResponse.prepare()
+		try {
+			if(workload.server?.externalId) {
+				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
+				def startResults = UpcloudProvisionProvider.startServer(authConfigMap, workload.server.externalId)
+				log.debug("startWorkload: startResults: ${startResults}")
+				if(startResults.success == true) {
+					rtn.success = true
+				} else {
+					rtn.msg = "${startResults.msg}" ?: 'Failed to start vm'
+				}
+			} else {
+				log.info("startWorkload: vm not found")
+			}
+		} catch(e) {
+			log.error("startContainer error: ${e}", e)
+			rtn.error = 'startWorkload: error starting workload'
+		}
+
+		return rtn
 	}
 
 	/**
