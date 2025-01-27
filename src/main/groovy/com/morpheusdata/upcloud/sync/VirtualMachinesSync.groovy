@@ -42,7 +42,7 @@ class VirtualMachinesSync {
         try {
             def authConfig = plugin.getAuthConfig(cloud)
             def apiResults = UpcloudApiService.listServers(authConfig)
-            log.info("apiResults: ${apiResults}")
+            log.debug("apiResults: ${apiResults}")
 
             if (apiResults.success == true) {
                 def servicePlans = morpheusContext.async.servicePlan.listIdentityProjections(
@@ -54,12 +54,6 @@ class VirtualMachinesSync {
                         new DataQuery().withFilter("account.id", cloud.account.id)
                         .withFilter("zone.id", cloud.id)
                 )
-                log.info("CLOUD.ACCOUNT.ID: ${cloud.account.id}")
-                log.info("CLOUD.ID: ${cloud.id}")
-                log.info("SERVER RECORDS: ${serverRecords}")
-                serverRecords.subscribe() { it ->
-                    System.out.println("NAME: " + it.name + ", ID: " + it.id)
-                }
 
                 SyncTask<ComputeServerIdentityProjection, Map, ComputeServer> syncTask = new SyncTask<>(serverRecords, apiResults.data.servers.server as Collection<Map>) as SyncTask<ComputeServerIdentityProjection, Map, ComputeServer>
                 syncTask.addMatchFunction { ComputeServerIdentityProjection imageObject, Map cloudItem ->
@@ -82,7 +76,6 @@ class VirtualMachinesSync {
     }
 
     private addMissingVirtualMachines(Collection<Map> addList, Observable<ServicePlanIdentityProjection> servicePlans) {
-        log.info("ADD MISSING VM: ${addList}")
         def authConfig = plugin.getAuthConfig(cloud)
         def serverType = new ComputeServerType(code: 'upcloudUnmanaged')
         def adds = []
@@ -98,9 +91,7 @@ class VirtualMachinesSync {
                 def addCapacityConfig = [maxCores:(cloudItem.'core_number' ?: 1), maxMemory:(cloudItem['memory_amount']?.toLong()*ComputeUtility.ONE_MEGABYTE),
                      maxStorage:0, usedStorage:0
                 ]
-                log.info("ADD VM SERVER DETAIL: ${cloudItem.uuid}")
                 def serverResults = UpcloudComputeUtility.getServerDetail(authConfig, cloudItem.uuid)
-                log.info("SERVER RESULTS: ${serverResults}")
                 if(serverResults.success == true && serverResults.server) {
                     //stats and ip address info
                     if(serverResults.server.vnc == 'on') {
@@ -148,7 +139,6 @@ class VirtualMachinesSync {
     }
 
     private updateMatchedVirtualMachines(List<SyncTask.UpdateItem<ComputeServer, Map>> updateList) {
-        log.info("UPDATE MATCHED VM")
         def saves = []
         def savesVolumes = [:]
         def savesCloudServers = [:]
@@ -261,7 +251,6 @@ class VirtualMachinesSync {
                     //Set the plan on the server
                     if (!server.plan) {
                         ServicePlan servicePlan = new ServicePlan([id: findServicePlanMatch(servicePlans.toList().blockingGet(), vm).id])
-                        //log.info("SERVICE PLAN VM SYNC: ${servicePlan.id}, name: ${servicePlan.name}")
                         if (servicePlan) {
                             server.plan = servicePlan
                             if (server.plan?.internalId == 'custom') {
@@ -336,7 +325,6 @@ class VirtualMachinesSync {
                     addVolume.rootVolume = true
                 createList << addVolume
                 saveRequired = true
-                log.info("ADD VOLUME: ${addVolume.name}, ${addVolume.maxStorage}")
             }
             //updates
             syncLists.updateList?.each { updateMap ->
@@ -373,17 +361,14 @@ class VirtualMachinesSync {
             }
 
             if(createList) {
-                log.info("CACHE CREATE")
                 morpheusContext.async.storageVolume.create(createList, server).blockingGet()
             }
 
             if(saveList) {
-                log.info("CACHE UPDATE")
                 morpheusContext.async.storageVolume.bulkSave(saveList).blockingGet()
             }
 
             if(removeList) {
-                log.info("CACHE REMOVE")
                 morpheusContext.async.storageVolume.remove(removeList, server, false).blockingGet()
             }
         } catch(e) {

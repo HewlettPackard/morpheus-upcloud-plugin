@@ -80,7 +80,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	@Override
 	Collection<OptionType> getOptionTypes() {
 		Collection<OptionType> options = [
-			new OptionType(code:'provisionType.general.noAgent', inputType:OptionType.InputType.CHECKBOX, name:'skip agent install', category:'provisionType.general',
+			new OptionType(code:"provisionType.${this.getCode()}.noAgent", inputType:OptionType.InputType.CHECKBOX, name:'skip agent install', category:"provisionType.${this.getCode()}",
 					fieldName:'noAgent', fieldCode: 'gomorpheus.optiontype.SkipAgentInstall', fieldLabel:'Skip Agent Install', fieldContext:'config', fieldGroup:'Advanced Options', required:false, enabled:true,
 					editable:false, global:false, placeHolder:null, helpBlock:'Skipping Agent installation will result in a lack of logging and guest operating system statistics. Automation scripts may also be adversely affected.', defaultValue:null, custom:false, displayOrder:4, fieldClass:null),
 			new OptionType(code:'containerType.upcloud.imageId', inputType:OptionType.InputType.SELECT, name:'imageType', category:'containerType.upcloud', optionSource: 'upcloudImage', optionSourceType:'upcloud',

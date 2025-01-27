@@ -26,7 +26,6 @@ class UpcloudApiService {
     static requestTimeout = 300000 //5 minutes?
 
     static listZones(Map authConfig) {
-        log.info("list zones authconfig: ${authConfig}")
         def rtn = [success:false]
         try {
             Map callOpts = [:]
@@ -89,7 +88,7 @@ class UpcloudApiService {
             def callOpts = [:]
             def callPath = '/storage/template'
             def callResults = callApi(authConfig, callPath, callOpts, 'GET')
-            log.info("callResults: ${callResults}")
+            log.debug("callResults: ${callResults}")
             if (callResults.success == true) {
                 def imageData = callResults.data
                 imageData?.storages?.storage?.each { image ->
@@ -310,7 +309,6 @@ class UpcloudApiService {
             if(serverConfig.userData)
                 callOpts.body.server.user_data = serverConfig.userData
             //create server
-            log.info("upcloud server body: ${callOpts.body}")
             def callResults = callApi(authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
@@ -849,7 +847,7 @@ class UpcloudApiService {
         def password = authConfig.password.toString()
         def apiVersion = authConfig.apiVersion ?: upcloudApiVersion
         def apiPath = "${apiVersion}${path}".toString()
-        log.info("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${JsonOutput.prettyPrint(JsonOutput.toJson(opts + [password: '*******']))}")
+        log.debug("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${JsonOutput.prettyPrint(JsonOutput.toJson(opts + [password: '*******']))}")
 
         RequestOptions requestOptions = new RequestOptions(headers: [:])
         if(opts.body) {
@@ -868,13 +866,10 @@ class UpcloudApiService {
             }
         }
 
-        log.info("REQUEST OPTIONS HEADERS: ${requestOptions.headers}")
-        log.info("REQUEST OPTIONS QUERY PARAMS: ${requestOptions.queryParams}")
         requestOptions.headers['Content-Type'] = 'application/json'
 
         HttpApiClient client = new HttpApiClient()
         ServiceResponse response = client.callJsonApi(apiUrl, apiPath, username, password, requestOptions, method)
-        log.info("CALL API RESPONSE: ${response}")
         return response
     }
 }

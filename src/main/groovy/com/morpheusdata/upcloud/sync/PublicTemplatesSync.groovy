@@ -35,13 +35,12 @@ class PublicTemplatesSync {
         try {
             def authConfig = plugin.getAuthConfig(cloud)
             def imageResults = UpcloudApiService.listPublicTemplates(authConfig)
-            log.info("imageResults: ${imageResults}")
+            log.debug("imageResults: ${imageResults}")
 
             if (imageResults.success == true) {
                 def imageRecords = morpheusContext.async.virtualImage.listIdentityProjections(
                         new DataQuery().withFilter("category", "upcloud.image.public.template")
                 )
-                log.info("imageRecords: ${imageRecords}")
                 SyncTask<VirtualImageIdentityProjection, Map, VirtualImage> syncTask = new SyncTask<>(imageRecords, imageResults.data.storages.storage as Collection<Map>) as SyncTask<VirtualImageIdentityProjection, Map, VirtualImage>
                 syncTask.addMatchFunction { VirtualImageIdentityProjection imageObject, Map cloudItem ->
                     imageObject.externalId == cloudItem?.uuid
@@ -110,23 +109,21 @@ class PublicTemplatesSync {
                 def template = updateItem.masterItem
                 def existingItem = updateItem.existingItem
                 def layoutMatch = imageTypeMap.find{ imageType -> imageType.match == template.title }
-                log.info("TEMPLATE NAME: ${template.title}")
-                log.info("LAYOUT MATCH 113: ${layoutMatch}, ${layoutMatch?.map}")
-                log.info("CODE: ${zoneCategory}.${layoutMatch?.instanceType}")
-                log.info("VERSION: ${layoutMatch?.version}")
+                log.debug("TEMPLATE NAME: ${template.title}")
+                log.debug("LAYOUT MATCH 113: ${layoutMatch}, ${layoutMatch?.map}")
+                log.debug("CODE: ${zoneCategory}.${layoutMatch?.instanceType}")
+                log.debug("VERSION: ${layoutMatch?.version}")
                 if(layoutMatch?.map == true) {
-                    log.info("Matching up : ${template.title}")
+                    log.debug("Matching up : ${template.title}")
                     def layout = morpheusContext.async.instanceTypeLayout.find(
                             new DataQuery().withFilter("code", "=", "${zoneCategory}.${layoutMatch.instanceType}")
                                     .withFilter("instanceVersion", "=", layoutMatch.version)
                     ).blockingGet()
-                    log.info("LAYOUT 120: ${layout}")
                     if(layout) {
                         def workloadType = morpheusContext.async.workloadType.find(
                                 new DataQuery().withFilter("code", "=", "${zoneCategory}.${layoutMatch.instanceType}")
                                         .withFilter("containerVersion", "=", layoutMatch.version)
                         ).blockingGet()
-                        log.info("WORKLOAD TYPE 126: ${workloadType}")
                         def save = false
                         if(!existingItem.osType) {
                             existingItem.osType = new OsType(code:template.title.startsWith("Windows ") ? 'windows' : 'linux')
@@ -167,7 +164,6 @@ class PublicTemplatesSync {
                                         .withFilter("instanceVersion", "=", layoutMatch.version)
                                         .withFilter("enabled", "=", true)
                         ).blockingGet()
-                        log.info("LAYOUT 168: ${layout}")
                     }
 
                     if(layout) {
@@ -185,7 +181,6 @@ class PublicTemplatesSync {
     }
 
     def removeMissingImages(List removeList) {
-        log.info("removeList: ${removeList}")
 
         def typeDeletes = []
         def setDeletes = []
@@ -201,7 +196,6 @@ class PublicTemplatesSync {
                 it.virtualImage = null
             }
             morpheusContext.services.workloadType.bulkSave(workloadTypes)
-            log.info("SAVED WORKLOAD TYPE")
             workloadTypes?.findAll{it.code.startsWith("upcloud.layout.public.template")}?.toArray().each { ctype ->
                 morpheusContext.async.workload.typeSet.list(
                     new DataQuery().withFilter("workloadType.id", "=", ctype.id)
@@ -223,34 +217,20 @@ class PublicTemplatesSync {
             }
             imageDeletes << virtualImage
         }
-        log.info("LAYOUT DELETES: ${layoutDeletes}")
-        log.info("SET DELETES: ${setDeletes}")
-        log.info("TYPE DELETES: ${typeDeletes}")
-        log.info("IMAGE DELETES: ${imageDeletes}")
 
-        log.info("BEFORE REMOVE API CALLS")
         morpheusContext.async.instanceTypeLayout.bulkRemove(layoutDeletes).blockingGet()
-        log.info("REMOVED LAYOUTS")
         morpheusContext.async.workload.typeSet.bulkRemove(setDeletes).blockingGet()
-        log.info("REMOVED WORKLOAD TYPE SETS")
         morpheusContext.async.workloadType.bulkRemove(typeDeletes).blockingGet()
-        log.info("REMOVED WORKLOAD TYPES")
         morpheusContext.async.virtualImage.bulkRemove(imageDeletes).blockingGet()
-        log.info("REMOVED IMAGES")
-
     }
 
 
     def createTemplateLayout(VirtualImage image, Map typeMatch, Map imageConfig) {
-        log.info("CREATE TEMPLATE LAYOUT image: ${image.name}")
         def zoneCategory = "upcloud.layout.public.template"
         def instanceType = new InstanceType(code:typeMatch.instanceType)
 
         //container type
         def provisionType = new ProvisionType(code:'upcloud')
-        log.info("INSTANCE TYPE: ${instanceType}")
-        log.info("PROVISION TYPE: ${provisionType}")
-        log.info("TYPEMATCH: ${typeMatch}")
         def workloadTypeConfig = [code:zoneCategory + '.' + typeMatch.instanceType, shortName:typeMatch.instanceType,
                                    name:'UpCloud ' + typeMatch.name, containerVersion:typeMatch.version, repositoryImage:'image', entryPoint:'/bin/bash',
                                    statTypeCode:typeMatch.statType, logTypeCode:typeMatch.logType, virtualImage:image,
@@ -258,9 +238,7 @@ class PublicTemplatesSync {
                                    category:typeMatch.instanceType, provisionType:provisionType, syncSource:'external',
                                    uuid: java.util.UUID.randomUUID(), hasSettings: false, userDeploy: true, showServerLogs: false]
         def workloadType = new WorkloadType(workloadTypeConfig)
-        log.info("WORKLOAD TYPE: ${workloadType}")
         morpheusContext.async.workloadType.create(workloadType).blockingGet()
-        log.info("SAVED WORKLOADTYPE")
 
         //type set
         def workloadTypeSetConfig = [code:zoneCategory + '.' + typeMatch.instanceType + '.set',
@@ -268,7 +246,6 @@ class PublicTemplatesSync {
                                       dynamicCount: false]
         def workloadTypeSet = new WorkloadTypeSet(workloadTypeSetConfig)
         morpheusContext.async.workload.typeSet.create(workloadTypeSet).blockingGet()
-        log.info("SAVED WORKLOAD TYPE SET")
 
         //layout
         def layoutConfig = [code:zoneCategory + '.' + typeMatch.instanceType,
@@ -282,7 +259,6 @@ class PublicTemplatesSync {
         //layout.workloads.add(workloadTypeSet)
         //instanceTypeService.setInstanceTypeLayoutToScale(layout)
         morpheusContext.async.instanceTypeLayout.create(layout).blockingGet()
-        log.info("SAVED LAYOUT")
     }
 
 
