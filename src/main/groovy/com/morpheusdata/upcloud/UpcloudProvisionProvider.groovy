@@ -3,6 +3,7 @@ package com.morpheusdata.upcloud
 import com.morpheusdata.core.AbstractProvisionProvider
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
+import com.morpheusdata.core.providers.ProvisionProvider
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
 import com.morpheusdata.model.ComputeServer
@@ -16,7 +17,7 @@ import com.morpheusdata.response.PrepareWorkloadResponse
 import com.morpheusdata.response.ProvisionResponse
 import com.morpheusdata.response.ServiceResponse
 
-class UpcloudProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider {
+class UpcloudProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, ProvisionProvider.BlockDeviceNameFacet {
 	public static final String PROVISION_PROVIDER_CODE = 'upcloud.provision'
 
 	protected MorpheusContext context
@@ -79,9 +80,12 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	@Override
 	Collection<OptionType> getOptionTypes() {
 		Collection<OptionType> options = [
-			new OptionType(
-				code:'provisionType.general.noAgent'
-			)
+			new OptionType(code:"provisionType.${this.getCode()}.noAgent", inputType:OptionType.InputType.CHECKBOX, name:'skip agent install', category:"provisionType.${this.getCode()}",
+					fieldName:'noAgent', fieldCode: 'gomorpheus.optiontype.SkipAgentInstall', fieldLabel:'Skip Agent Install', fieldContext:'config', fieldGroup:'Advanced Options', required:false, enabled:true,
+					editable:false, global:false, placeHolder:null, helpBlock:'Skipping Agent installation will result in a lack of logging and guest operating system statistics. Automation scripts may also be adversely affected.', defaultValue:null, custom:false, displayOrder:4, fieldClass:null),
+			new OptionType(code:'containerType.upcloud.imageId', inputType:OptionType.InputType.SELECT, name:'imageType', category:'containerType.upcloud', optionSource: 'upcloudImage', optionSourceType:'upcloud',
+					fieldName:'imageId', fieldCode: 'gomorpheus.optiontype.Image', fieldLabel:'Image', fieldContext:'config', required:false, enabled:true, editable:false, global:false,
+					placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:3, fieldClass:null)
 		]
 		// TODO: create some option types for provisioning and add them to collection
 		return options
@@ -296,7 +300,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	String getCode() {
-		return 'upcloud'
+		return PROVISION_PROVIDER_CODE
 	}
 
 	/**
@@ -308,5 +312,20 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	@Override
 	String getName() {
 		return 'Upcloud Provisioning'
+	}
+
+	@Override
+	String[] getDiskNameList() {
+		return ['vda', 'vdb', 'vdc', 'vdd', 'vde', 'vdf', 'vdg', 'vdh', 'vdi', 'vdj', 'vdk', 'vdl','vdm','vdn','vdo', 'vdp','vdq','vdr','vds','vdt','vdu','vdv','vdw','vdx','vdy','vdz'] as String[]
+	}
+
+	static extractDiskDisplayName(name) {
+		def rtn = name
+		if(rtn) {
+			def lastSlash = rtn.lastIndexOf('/')
+			if(lastSlash > -1)
+				rtn = rtn.substring(lastSlash + 1)
+		}
+		return rtn
 	}
 }

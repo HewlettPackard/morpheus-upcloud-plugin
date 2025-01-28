@@ -25,10 +25,16 @@ import com.morpheusdata.model.StorageControllerType
 import com.morpheusdata.model.StorageVolumeType
 import com.morpheusdata.request.ValidateCloudRequest
 import com.morpheusdata.response.ServiceResponse
+import com.morpheusdata.upcloud.sync.PlansSync
 import com.morpheusdata.upcloud.sync.PublicTemplatesSync
+import com.morpheusdata.upcloud.sync.UserImagesSync
+import com.morpheusdata.upcloud.sync.VirtualMachinesSync
 import com.morpheusdata.upcloud.util.UpcloudStatusUtility
 import com.morpheusdata.upcloud.services.UpcloudApiService
+import groovy.json.JsonOutput
+import groovy.util.logging.Slf4j
 
+@Slf4j
 class UpcloudCloudProvider implements CloudProvider {
 	public static final String CLOUD_PROVIDER_CODE = 'upcloud.cloud'
 
@@ -80,17 +86,17 @@ class UpcloudCloudProvider implements CloudProvider {
 	Collection<OptionType> getOptionTypes() {
 		Collection<OptionType> options = [
 			new OptionType(code:'zoneType.upcloud.credential', inputType: OptionType.InputType.CREDENTIAL, name:'Credentials', category:'zoneType.upcloud',
-				fieldName:'type', fieldCode:'gomorpheus.label.credentials', fieldLabel:'Credentials', fieldContext:'credential', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:true, global:false,
-				placeHolder:null, helpBlock:'', defaultValue:'local', custom:false, displayOrder:2, fieldClass:null, optionSource:'credentials', config: JsonOutput.toJson(credentialTypes:['username-password']).toString()),
+				fieldName:'type', fieldCode:'gomorpheus.label.credentials', fieldLabel:'Credentials', fieldContext:'credential', fieldSet:'', fieldGroup:'Connection Options', required:true, enabled:true, editable:true, global:false,
+				placeHolder:null, helpBlock:'', defaultValue:'local', custom:false, displayOrder:1, fieldClass:null, optionSource:'credentials', config: JsonOutput.toJson(credentialTypes:['username-password']).toString()),
 			new OptionType(code:'zoneType.upcloud.username', inputType:OptionType.InputType.TEXT, name:'Username', category:'zoneType.upcloud',
-				fieldName:'username', fieldCode: 'gomorpheus.optiontype.Username', fieldLabel:'Username', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:false, global:false,
-				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:2, fieldClass:null, fieldSize:15, localCredential:true),
+				fieldName:'username', fieldCode: 'gomorpheus.optiontype.Username', fieldLabel:'Username', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Options', required:true, enabled:true, editable:false, global:false,
+				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:2, fieldClass:null, localCredential:true),
 			new OptionType(code:'zoneType.upcloud.password', inputType:OptionType.InputType.PASSWORD, name:'Password', category:'zoneType.upcloud',
-				fieldName:'password', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:false, global:false,
-				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:3, fieldClass:null, fieldSize:25, localCredential:true),
-			new OptionType(code:'zoneType.upcloud.zone', inputType:OptionType.InputType.TEXT, name:'Zone', category:'zoneType.upcloud',
-				fieldName:'zone', fieldCode: 'gomorpheus.optiontype.Zone', fieldLabel:'Zone', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Config', required:true, enabled:true, editable:false, global:false,
-				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:4, fieldClass:null, fieldSize:15)
+				fieldName:'password', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Options', required:true, enabled:true, editable:false, global:false,
+				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:3, fieldClass:null, localCredential:true),
+			new OptionType(code:'zoneType.upcloud.zone', inputType:OptionType.InputType.SELECT, name:'Zone', category:'zoneType.upcloud',
+				fieldName:'zone', fieldCode: 'gomorpheus.optiontype.Zone', fieldLabel:'Zone', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Options', required:true, enabled:true, editable:false, global:false,
+				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:4, fieldClass:null, optionSourceType: null, optionSource: 'upcloud.upcloudCloudDataset', dependsOn: 'config.username, credential.type, credential.username, credential.password')
 		]
 
 		return options
@@ -181,15 +187,37 @@ class UpcloudCloudProvider implements CloudProvider {
 				provisionTypeCode: 'manual',
 				computeTypeCode:'docker-host',
 				optionTypes:[
-					new OptionType(code:'computeServerType.global.sshHost'),
-					new OptionType(code:'computeServerType.global.sshPort'),
-					new OptionType(code:'computeServerType.global.sshUsername'),
-					new OptionType(code:'computeServerType.global.sshPassword'),
-					new OptionType(code:'computeServerType.global.provisionKey'),
-					new OptionType(code:'computeServerType.global.lvmEnabled'),
-					new OptionType(code:'computeServerType.global.dataDevice'),
-					new OptionType(code:'computeServerType.global.softwareRaid'),
-					new OptionType(code:'computeServerType.global.network.name')
+					new OptionType(code:"computeServerType.${this.getCode()}.sshHost", inputType:OptionType.InputType.TEXT, name:'sshHost', category:"computeServerType.${this.getCode()}",
+								fieldName:'sshHost', fieldCode: 'gomorpheus.optiontype.Host', fieldLabel:'Host', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+								required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
+								displayOrder:1, fieldClass:null, fieldSize:15),
+					new OptionType(code:"computeServerType.${this.getCode()}.sshPort", inputType:OptionType.InputType.NUMBER, name:'sshPort', category:"computeServerType.${this.getCode()}",
+							fieldName:'sshPort', fieldCode: 'gomorpheus.optiontype.Port', fieldLabel:'Port', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+							required:false, enabled:true, editable:false, global:false, placeHolder:'22', helpBlock:'', defaultValue:'22', custom:false,
+							displayOrder:2, fieldClass:null, fieldSize:5),
+					new OptionType(code:"computeServerType.${this.getCode()}.sshUsername", inputType:OptionType.InputType.TEXT, name:'sshUsername', category:"computeServerType.${this.getCode()}",
+							fieldName:'sshUsername', fieldCode: 'gomorpheus.optiontype.User', fieldLabel:'User', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+							required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
+							displayOrder:3, fieldClass:null),
+					new OptionType(code:"computeServerType.${this.getCode()}.sshPassword", inputType:OptionType.InputType.PASSWORD, name:'sshPassword', category:"computeServerType.${this.getCode()}",
+							fieldName:'sshPassword', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+							required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
+							displayOrder:4, fieldClass:null),
+					new OptionType(code:"computeServerType.${this.getCode()}.provisionKey", inputType:OptionType.InputType.SELECT, name:'provisionKey', category:"computeServerType.${this.getCode()}",
+							fieldName:'provisionKey', fieldCode: 'gomorpheus.optiontype.SshKey', fieldLabel:'SSH Key', fieldContext:'config', fieldGroup:'Options', required:false, enabled:true, optionSource: 'privateKeys',
+							editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:5, fieldClass:null),
+					new OptionType(code:"computeServerType.${this.getCode()}.lvmEnabled", inputType:OptionType.InputType.CHECKBOX, name:'lvmEnabled', category:"computeServerType.${this.getCode()}",
+							fieldName:'lvmEnabled', fieldCode: 'gomorpheus.optiontype.LvmEnabled?', fieldLabel:'LVM Enabled?', fieldContext:'server', fieldGroup:'Server Options', required:false, enabled:true, editable:false, global:false,
+							placeHolder:null, helpBlock:'', defaultValue:'on', custom:false, displayOrder:6, fieldClass:'lvm-enabled-checkbox', blockClass:'checkbox-container'),
+					new OptionType(code:"computeServerType.${this.getCode()}.dataDevice", inputType:OptionType.InputType.TEXT, name:'dataDevice', category:"computeServerType.${this.getCode()}",
+							fieldName:'dataDevice', fieldCode: 'gomorpheus.optiontype.DataVolume', fieldLabel:'Data Volume', fieldContext:'server', fieldGroup:'Server Options', required:true, enabled:true, editable:false, global:false,
+							placeHolder:null, helpBlock:'', defaultValue:'/dev/sdb', custom:false, displayOrder:7, fieldClass:null, wrapperClass:'lvm-server-options'),
+					new OptionType(code:"computeServerType.${this.getCode()}.softwareRaid", inputType:OptionType.InputType.CHECKBOX, name:'softwareRaid', category:"computeServerType.${this.getCode()}",
+							fieldName:'softwareRaid', fieldCode: 'gomorpheus.optiontype.SoftwareRaid', fieldLabel:'Software Raid', fieldContext:'server', fieldGroup:'Server Options', required:false, enabled:true, editable:false, global:false,
+							placeHolder:null, helpBlock:'', defaultValue:false, custom:false, displayOrder:8, fieldClass:null, wrapperClass:'lvm-server-options', blockClass:'checkbox-container'),
+					new OptionType(code:"computeServerType.${this.getCode()}.network.name", inputType:OptionType.InputType.TEXT, name:'network name', category:"computeServerType.${this.getCode()}",
+							fieldName:'name', fieldCode: 'gomorpheus.optiontype.NetworkInterface', fieldLabel:'Network Interface', fieldContext:'network', fieldGroup:'Server Options', required:false, enabled:true, editable:false, global:false,
+							placeHolder:null, helpBlock:'', defaultValue:'eth0', custom:false, displayOrder:9, fieldClass:null)
 				]
 			),
 			new ComputeServerType(
@@ -222,11 +250,25 @@ class UpcloudCloudProvider implements CloudProvider {
 				provisionTypeCode: 'manual',
 				computeTypeCode: 'kvm-host',
 				optionTypes:[
-					new OptionType(code:'computeServerType.global.sshHost'),
-					new OptionType(code:'computeServerType.global.sshPort'),
-					new OptionType(code:'computeServerType.global.sshUsername'),
-					new OptionType(code:'computeServerType.global.sshPassword'),
-					new OptionType(code:'computeServerType.global.provisionKey')
+					new OptionType(code:"computeServerType.${this.getCode()}.sshHost", inputType:OptionType.InputType.TEXT, name:'sshHost', category:"computeServerType.${this.getCode()}",
+							fieldName:'sshHost', fieldCode: 'gomorpheus.optiontype.Host', fieldLabel:'Host', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+							required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
+							displayOrder:1, fieldClass:null, fieldSize:15),
+					new OptionType(code:"computeServerType.${this.getCode()}.sshPort", inputType:OptionType.InputType.NUMBER, name:'sshPort', category:"computeServerType.${this.getCode()}",
+							fieldName:'sshPort', fieldCode: 'gomorpheus.optiontype.Port', fieldLabel:'Port', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+							required:false, enabled:true, editable:false, global:false, placeHolder:'22', helpBlock:'', defaultValue:'22', custom:false,
+							displayOrder:2, fieldClass:null, fieldSize:5),
+					new OptionType(code:"computeServerType.${this.getCode()}.sshUsername", inputType:OptionType.InputType.TEXT, name:'sshUsername', category:"computeServerType.${this.getCode()}",
+							fieldName:'sshUsername', fieldCode: 'gomorpheus.optiontype.User', fieldLabel:'User', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+							required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
+							displayOrder:3, fieldClass:null),
+					new OptionType(code:"computeServerType.${this.getCode()}.sshPassword", inputType:OptionType.InputType.PASSWORD, name:'sshPassword', category:"computeServerType.${this.getCode()}",
+							fieldName:'sshPassword', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
+							required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
+							displayOrder:4, fieldClass:null),
+					new OptionType(code:"computeServerType.${this.getCode()}.provisionKey", inputType:OptionType.InputType.SELECT, name:'provisionKey', category:"computeServerType.${this.getCode()}",
+							fieldName:'provisionKey', fieldCode: 'gomorpheus.optiontype.SshKey', fieldLabel:'SSH Key', fieldContext:'config', fieldGroup:'Options', required:false, enabled:true, optionSource: 'privateKeys',
+							editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:5, fieldClass:null)
 				]
 			)
 		]
@@ -344,8 +386,8 @@ class UpcloudCloudProvider implements CloudProvider {
 					//def doInventory = cloudInfo.getConfigProperty('importExisting')
 					//def vmCacheOpts = [zone:zone, createNew:(inventoryLevel == 'basic' || inventoryLevel == 'full'), inventoryLevel:inventoryLevel]
 
-					//(new UserImagesSync(this.plugin, cloudInfo)).execute()
-					//(new VirtualMachinesSync(this.plugin, cloudInfo)).execute()
+					(new UserImagesSync(cloudInfo, this.plugin, context)).execute()
+					(new VirtualMachinesSync(cloudInfo, this.plugin, context)).execute()
 
 					rtn = ServiceResponse.success()
 				} else {
@@ -377,8 +419,8 @@ class UpcloudCloudProvider implements CloudProvider {
 	@Override
 	void refreshDaily(Cloud cloudInfo) {
 		try {
-			//(new PlansSync(this.plugin, cloudInfo)).execute()
-			(new PublicTemplatesSync(this.plugin, cloudInfo)).execute()
+			(new PlansSync(cloudInfo, this.plugin, context)).execute()
+			(new PublicTemplatesSync(cloudInfo, this.plugin, context)).execute()
 		} catch(e) {
 			log.error("refreshZone error: ${e}", e)
 		}
