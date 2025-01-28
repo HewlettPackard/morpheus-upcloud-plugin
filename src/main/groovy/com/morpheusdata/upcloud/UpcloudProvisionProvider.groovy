@@ -366,7 +366,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		opts.createUserList = runConfig.userConfig.createUsers
 
 		//save server
-		runConfig.server = saveAndGet(server)
+		// runConfig.server = saveAndGet(server)
 		log.debug("create server: ${runConfig}")
 
 		//set install agent
