@@ -1,11 +1,13 @@
 package com.morpheusdata.upcloud.services
 
+import com.morpheusdata.response.ServiceResponse
 import com.morpheusdata.upcloud.*
 import com.morpheusdata.core.util.*
 import com.morpheusdata.upcloud.util.*
 import com.morpheusdata.core.util.HttpApiClient.RequestOptions
 import groovy.json.JsonOutput
 import groovy.util.logging.Commons
+import groovy.util.logging.Slf4j
 import org.apache.http.*
 import org.apache.http.client.*
 import org.apache.http.client.methods.*
@@ -13,7 +15,11 @@ import org.apache.http.client.utils.*
 import org.apache.http.entity.*
 import org.apache.http.util.*
 
-@Commons
+import javax.imageio.spi.ServiceRegistry
+import java.lang.String
+import java.lang.ref.ReferenceQueue
+
+@Slf4j
 class UpcloudApiService {
     static upCloudEndpoint = 'https://api.upcloud.com'
     static upcloudApiVersion = '1.3'
@@ -22,8 +28,8 @@ class UpcloudApiService {
     static listZones(Map authConfig) {
         def rtn = [success:false]
         try {
-            def callOpts = [:]
-            def callPath = '/zone'
+            Map callOpts = [:]
+            String callPath = '/zone'
             def callResults = callApi(authConfig, callPath, callOpts, 'GET')
             if(callResults.success == true) {
                 rtn.data = callResults.data
@@ -35,7 +41,7 @@ class UpcloudApiService {
             log.error "Error on listZones: ${e}", e
             rtn.success = false
         }
-        return rtn
+        return ServiceResponse.create(rtn)
     }
 
     static listPlans(Map authConfig) {
@@ -70,7 +76,7 @@ class UpcloudApiService {
                 rtn.success = false
             }
         } catch (e) {
-            log.error "Error on listPlans: ${e}", e
+            log.error "Error on listPrices: ${e}", e
             rtn.success = false
         }
         return rtn
@@ -82,6 +88,7 @@ class UpcloudApiService {
             def callOpts = [:]
             def callPath = '/storage/template'
             def callResults = callApi(authConfig, callPath, callOpts, 'GET')
+            log.debug("callResults: ${callResults}")
             if (callResults.success == true) {
                 def imageData = callResults.data
                 imageData?.storages?.storage?.each { image ->
@@ -121,6 +128,7 @@ class UpcloudApiService {
             log.error "Error on listUserTemplates: ${e}", e
             rtn.success = false
         }
+        log.debug("USER TEMPLATES: ${rtn.data}")
         return rtn
     }
 
@@ -301,7 +309,6 @@ class UpcloudApiService {
             if(serverConfig.userData)
                 callOpts.body.server.user_data = serverConfig.userData
             //create server
-            log.info("upcloud server body: ${callOpts.body}")
             def callResults = callApi(authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
@@ -834,18 +841,15 @@ class UpcloudApiService {
         return rtn
     }*/
 
-    static callApi(Map authConfig, String path, Map opts = [:], String method) {
-        def apiUrl = authConfig.apiUrl
-        String username = authConfig.username
-        String password = authConfig.password
+    static ServiceResponse callApi(Map authConfig, String path, Map opts = [:], String method) {
+        def apiUrl = authConfig.apiUrl.toString()
+        def username = authConfig.username.toString()
+        def password = authConfig.password.toString()
         def apiVersion = authConfig.apiVersion ?: upcloudApiVersion
-        String apiPath = "${apiVersion}${path}"
-        String fullUrl = "${apiUrl}/${apiPath}"
+        def apiPath = "${apiVersion}${path}".toString()
+        log.debug("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${JsonOutput.prettyPrint(JsonOutput.toJson(opts + [password: '*******']))}")
 
-        String creds = "${username}:${password}".toString()
-        String authHeader = "Basic ${creds.getBytes().encodeBase64().toString()}".toString()
-
-        RequestOptions requestOptions = new RequestOptions()
+        RequestOptions requestOptions = new RequestOptions(headers: [:])
         if(opts.body) {
            requestOptions.body = opts.body
         }
@@ -862,9 +866,10 @@ class UpcloudApiService {
             }
         }
 
-        requestOptions.headers['Authorization'] = authHeader
         requestOptions.headers['Content-Type'] = 'application/json'
 
-        return HttpApiClient.callApi(fullUrl, apiPath, username, password, requestOptions, method)
+        HttpApiClient client = new HttpApiClient()
+        ServiceResponse response = client.callJsonApi(apiUrl, apiPath, username, password, requestOptions, method)
+        return response
     }
 }
