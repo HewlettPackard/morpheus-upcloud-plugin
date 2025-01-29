@@ -227,7 +227,8 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		try {
 			if(workload.server?.externalId) {
 				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
-				def stopResults = UpcloudProvisionProvider.stopServer(authConfigMap, workload.server.externalId)
+				def statusResults = UpcloudApiService.waitForServerNotStatus(authConfigMap, workload.server.externalId, 'maintenance')
+				def stopResults = UpcloudProvisionProvider.stopServer(workload.server)
 				if(stopResults.success == true) {
 					rtn.success = true
 				}
@@ -254,7 +255,8 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		try {
 			if(workload.server?.externalId) {
 				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
-				def startResults = UpcloudProvisionProvider.startServer(authConfigMap, workload.server.externalId)
+				def statusResults = UpcloudApiService.waitForServerNotStatus(authConfigMap, workload.server.externalId, 'maintenance')
+				def startResults = UpcloudProvisionProvider.startServer(workload.server)
 				log.debug("startWorkload: startResults: ${startResults}")
 				if(startResults.success == true) {
 					rtn.success = true
@@ -293,7 +295,27 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse removeWorkload(Workload workload, Map opts) {
-		return ServiceResponse.success()
+		log.debug "removeWorkload: ${workload} ${opts}"
+		ComputeServer server = workload.server
+		Cloud cloud = server.cloud
+		if(workload.server?.externalId) {
+			def authConfig = plugin.getAuthConfig(cloud)
+			def notStatus = UpcloudApiService.waitForServerNotStatus(authConfig, server.externalId, 'maintenance')
+			stopWorkload(workload)
+			def statusResult = UpcloudApiService.waitForServerStatus(authConfig, server.externalId, 'stopped')
+			if(statusResult.sucess == true) {
+				def removeResults = UpcloudApiService.removeServer(authConfig, server.externalId)
+				if (removeResults.success == true) {
+					return ServiceResponse.success()
+				} else {
+					return ServiceResponse.error('Failed to remove vm')
+				}
+			} else {
+				return ServiceResponse.error('Failed to remove vm')
+			}
+		} else {
+			return ServiceResponse.error('vm not found')
+		}
 	}
 
 	/**
