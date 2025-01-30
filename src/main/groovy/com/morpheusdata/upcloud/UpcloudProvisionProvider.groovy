@@ -223,7 +223,24 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse stopWorkload(Workload workload) {
-		return ServiceResponse.success()
+		def rtn = ServiceResponse.prepare()
+		try {
+			if(workload.server?.externalId) {
+				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
+				def statusResults = UpcloudApiService.waitForServerNotStatus(authConfigMap, workload.server.externalId, 'maintenance')
+				def stopResults = UpcloudProvisionProvider.stopServer(workload.server)
+				if(stopResults.success == true) {
+					rtn.success = true
+				}
+			} else {
+				rtn.success = true
+				rtn.msg = 'stopWorkload: vm not found'
+			}
+		} catch (e) {
+			log.error("stopContainer error: ${e}", e)
+			rtn.msg = 'stopWorkload: error stopping workload'
+		}
+		return rtn
 	}
 
 	/**
@@ -233,7 +250,28 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse startWorkload(Workload workload) {
-		return ServiceResponse.success()
+		log.debug("startWorkload: ${workload.id}")
+		def rtn = ServiceResponse.prepare()
+		try {
+			if(workload.server?.externalId) {
+				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
+				def statusResults = UpcloudApiService.waitForServerNotStatus(authConfigMap, workload.server.externalId, 'maintenance')
+				def startResults = UpcloudProvisionProvider.startServer(workload.server)
+				log.debug("startWorkload: startResults: ${startResults}")
+				if(startResults.success == true) {
+					rtn.success = true
+				} else {
+					rtn.msg = "${startResults.msg}" ?: 'Failed to start vm'
+				}
+			} else {
+				log.info("startWorkload: vm not found")
+			}
+		} catch(e) {
+			log.error("startContainer error: ${e}", e)
+			rtn.error = 'startWorkload: error starting workload'
+		}
+
+		return rtn
 	}
 
 	/**
@@ -257,7 +295,27 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse removeWorkload(Workload workload, Map opts) {
-		return ServiceResponse.success()
+		log.debug "removeWorkload: ${workload} ${opts}"
+		ComputeServer server = workload.server
+		Cloud cloud = server.cloud
+		if(workload.server?.externalId) {
+			def authConfig = plugin.getAuthConfig(cloud)
+			def notStatus = UpcloudApiService.waitForServerNotStatus(authConfig, server.externalId, 'maintenance')
+			stopWorkload(workload)
+			def statusResult = UpcloudApiService.waitForServerStatus(authConfig, server.externalId, 'stopped')
+			if(statusResult.sucess == true) {
+				def removeResults = UpcloudApiService.removeServer(authConfig, server.externalId)
+				if (removeResults.success == true) {
+					return ServiceResponse.success()
+				} else {
+					return ServiceResponse.error('Failed to remove vm')
+				}
+			} else {
+				return ServiceResponse.error('Failed to remove vm')
+			}
+		} else {
+			return ServiceResponse.error('vm not found')
+		}
 	}
 
 	/**
