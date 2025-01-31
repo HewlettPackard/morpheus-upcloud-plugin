@@ -390,7 +390,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	String getCode() {
-		return 'upcloud'
+		return PROVISION_PROVIDER_CODE
 	}
 
 	/**
