@@ -563,7 +563,28 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse deleteServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		log.debug("deleteServer: ${computeServer}")
+		if(computeServer?.externalId && (computeServer.managed == true || computeServer.computeServerType?.controlPower)) {
+			def authConfig = plugin.getAuthConfig(computeServer.cloud)
+			def stopResults = UpcloudApiService.stopServer(authConfig, computeServer.externalId)
+			def statusResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'stopped')
+			if (statusResults.success) {
+				def removeResults = UpcloudApiService.removeServer(authConfig, computeServer.externalId)
+				if(removeResults.success) {
+					computeServer.volumes?.each { volume ->
+						if(volume.externalId) {
+							def volumeResults = UpcloudApiService.removeStorage(authConfig, volume.externalId)
+						}
+					}
+				}
+				return ServiceResponse.success()
+			} else {
+				return ServiceResponse.error('Failed to stop server')
+			}
+		} else {
+			log.info("deleteServer - ignoring request for unmanaged instance")
+		}
+		ServiceResponse.success()
 	}
 
 	/**
