@@ -509,23 +509,14 @@ class UpcloudCloudProvider implements CloudProvider {
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
 		log.debug("startServer: ${computeServer}")
-		if(computeServer.managed == true || computeServer.computeServerType?.controlPower) {
-			def authConfig = plugin.getAuthConfig(computeServer.cloud)
-			def startResults = UpcloudApiService.startServer(authConfig, computeServer.externalId)
-			if(startResults.success == true) {
-				def waitResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'running')
-				if(waitResults.success) {
-					return ServiceResponse.success()
-				} else {
-					return ServiceResponse.error('Failed to start vm')
-				}
-			} else {
-				return ServiceResponse.error('Failed to start vm')
-			}
-		} else {
-			log.info("startServer - ignoring request for unmanaged instance")
+		def rtn = [success:false]
+		try {
+			return UpcloudProvisionProvider.startServer(computeServer)
+		} catch(e) {
+			rtn.msg = "Error starting server: ${e.message}"
+			log.error("startServer error: ${e}", e)
 		}
-		ServiceResponse.success()
+		return ServiceResponse.create(rtn)
 	}
 
 	/**
