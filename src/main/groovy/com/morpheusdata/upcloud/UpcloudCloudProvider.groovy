@@ -537,23 +537,14 @@ class UpcloudCloudProvider implements CloudProvider {
 	@Override
 	ServiceResponse stopServer(ComputeServer computeServer) {
 		log.debug("stopServer: ${computeServer}")
-		if(computeServer.managed == true || computeServer.computeServerType?.controlPower) {
-			def authConfig = plugin.getAuthConfig(computeServer.cloud)
-			def stopResults = UpcloudApiService.stopServer(authConfig, computeServer.externalId)
-			if (stopResults.success) {
-				def waitResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'stopped')
-				if(waitResults.success) {
-					return ServiceResponse.success()
-				} else {
-					return ServiceResponse.error('Failed to stop vm')
-				}
-			} else {
-				return ServiceResponse.error('Failed to stop vm')
-			}
-		} else {
-			log.info("stopServer - ignoring request for unmanaged instance")
+		def rtn = [success:false]
+		try {
+			return UpcloudProvisionProvider.stopServer(computeServer)
+		} catch(e) {
+			rtn.msg = "Error stoping server: ${e.message}"
+			log.error("stopServer error: ${e}", e)
 		}
-		ServiceResponse.success()
+		return ServiceResponse.create(rtn)
 	}
 
 	/**
