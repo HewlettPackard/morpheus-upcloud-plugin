@@ -962,18 +962,18 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					log.debug("addDiskResults ${addDiskResults}")
 
 					if(!addDiskResults.success)
-						throw new Exception("Error in creating new volume: ${addDiskResults}")
+						rtn.setError("Error in creating new volume: ${addDiskResults}")
 					def newVolumeId = addDiskResults.data.storage.uuid
 					def checkReadyResult = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
 					if(!checkReadyResult.success)
-						throw new Exception("Volume never became ready: ${checkReadyResult}")
+						rtn.setError("Volume never became ready: ${checkReadyResult}")
 					// Attach the new one
 					def attachResults = UpcloudApiService.attachStorage(authConfigMap, computeServer.externalId, newVolumeId, newCounter)
 					if(!attachResults.success)
-						throw new Exception("Volume failed to attach: ${attachResults}")
+						rtn.setError("Volume failed to attach: ${attachResults}")
 					def waitAttachResults = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
 					if(!waitAttachResults.success)
-						throw new Exception("Volume never attached: ${waitAttachResults}")
+						rtn.setError("Volume never attached: ${waitAttachResults}")
 
 					if (addDiskResults.success == true) {
 						def newVolume = buildStorageVolume(computeServer, volumeAdd, addDiskResults, newCounter)
