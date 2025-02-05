@@ -508,7 +508,15 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		log.debug("startServer: ${computeServer}")
+		def rtn = [success:false]
+		try {
+			return UpcloudProvisionProvider.startServer(computeServer)
+		} catch(e) {
+			rtn.msg = "Error starting server: ${e.message}"
+			log.error("startServer error: ${e}", e)
+		}
+		return ServiceResponse.create(rtn)
 	}
 
 	/**
