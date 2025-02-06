@@ -893,129 +893,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		return internalResizeServer(server, resizeRequest)
 	}
 
-	def internalResizeServer(ComputeServer server, ResizeRequest resizeRequest, Map opts = [:]) {
-		ServiceResponse rtn = ServiceResponse.success()
-		ComputeServer computeServer = context.async.computeServer.get(server.id).blockingGet()
-		def authConfigMap = plugin.getAuthConfig(computeServer.cloud)
-
-		try {
-			computeServer.status = 'resizing'
-			computeServer = saveAndGet(computeServer)
-
-			//sizing
-			def requestedMemory = resizeRequest.maxMemory
-			def requestedCores = resizeRequest?.maxCores
-
-			def currentMemory = computeServer.maxMemory ?: computeServer.getConfigProperty('maxMemory')?.toLong()
-			def currentCores = server.maxCores ?: 1
-			def neededMemory = requestedMemory - currentMemory
-			def neededCores = (requestedCores ?: 1) - (currentCores ?: 1)
-			def resizeSpecs = [externalId: computeServer.externalId, maxMemory: requestedMemory, maxCpu: requestedCores]
-
-			if(neededMemory != 0 || neededCores != 0) {
-				//resize it
-				def resizeResults = UpcloudApiService.resizeServer(authConfigMap, computeServer.externalId, resizeSpecs)
-				if(resizeResults.success == true) {
-					computeServer.plan = plan
-					computeServer.maxMemory = requestedMemory.toLong()
-					computeServer.maxCores = (requestedCores ?: 1).toLong()
-					computeServer = saveAndGet(computeServer)
-				} else {
-					rtn.success = false
-					rtn.error = 'internalResizeServer: failed to resize server'
-					log.warn("${rtn.error}")
-					return rtn
-				}
-			}
-			//disk sizes
-			if(opts.volumes) {
-				def newCounter = computeServer.volumes?.size()
-
-				resizeRequest.volumesUpdate?.each { volumeUpdate ->
-					StorageVolume existing = volumeUpdate.existingModel
-					Map updateProps = volumeUpdate.updateProps
-					if (updateProps.maxStorage > existing.maxStorage) {
-						def volumeId = existing.externalId
-						def storageVolumeId = existing.id
-						def resizeResults = UpcloudApiService.resizeStorage(authConfigMap, volumeId, [maxStorage:volumeUpdate.volume.maxStorage])
-						log.debug("resizeResults ${resizeResults}")
-
-						if(resizeResults.success == true) {
-							def existingVolume = context.async.storageVolume.get(existing.id).blockingGet()
-							if (existingVolume) {
-								existingVolume.maxStorage = updateProps?.maxStorage
-								context.async.storageVolume.save(existingVolume).blockingGet()
-							} else {
-								log.warn("resize volume could not find existing volume to update: ${storageVolumeId}")
-							}
-						}
-					}
-				}
-
-
-				def storageVolumeTypes = [:]
-				resizeRequest.volumesAdd.each { volumeAdd ->
-					//new disk add it
-					def zoneRef = computeServer.cloud.getConfigMap().zone
-					def addDiskConfig = [name:volumeAdd.name, zoneRef:zoneRef, serverName:computeServer.name, maxStorage:volumeAdd.volume.maxStorage]
-					def addDiskResults = UpcloudApiService.createStorage(authConfigMap, addDiskConfig)
-					log.debug("addDiskResults ${addDiskResults}")
-
-					if(!addDiskResults.success)
-						rtn.setError("Error in creating new volume: ${addDiskResults}")
-					def newVolumeId = addDiskResults.data.storage.uuid
-					def checkReadyResult = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
-					if(!checkReadyResult.success)
-						rtn.setError("Volume never became ready: ${checkReadyResult}")
-					// Attach the new one
-					def attachResults = UpcloudApiService.attachStorage(authConfigMap, computeServer.externalId, newVolumeId, newCounter)
-					if(!attachResults.success)
-						rtn.setError("Volume failed to attach: ${attachResults}")
-					def waitAttachResults = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
-					if(!waitAttachResults.success)
-						rtn.setError("Volume never attached: ${waitAttachResults}")
-
-					if (addDiskResults.success == true) {
-						def newVolume = buildStorageVolume(computeServer, volumeAdd, addDiskResults, newCounter)
-						def volumeType = storageVolumeTypes[volumeAdd.storageType.toLong()] // 'upcloudVolume'
-						def deviceName = getDiskName(newCounter)
-						def deviceAddress = waitAttachResults.results?.address ?: deviceName
-						newVolume.type = volumeType
-						newVolume.maxStorage = volumeAdd.volume.maxStorage
-						newVolume.externalId = newVolumeId
-						newVolume.deviceName = deviceName
-						newVolume.deviceDisplayName = extractDiskDisplayName(deviceAddress)
-						setVolumeInfo(computeServer.volumes, addDiskResults.volumes)
-						context.async.storageVolume.create([newVolume], computeServer).blockingGet()
-						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
-						newCounter++
-					} else {
-						log.warn("error adding disk: ${addDiskResults}")
-					}
-				}
-
-				resizeRequest.volumesDelete.each { volume ->
-					log.info("deleting volume : ${volume.externalId}")
-					def deviceName = volume.deviceName
-					def detachResults = UpcloudApiService.detachStorage(authConfigMap, computeServer.externalId, deviceName)
-					log.debug("detachResults ${detachResults}")
-					if (detachResults.success == true) {
-						context.async.storageVolume.remove([volume], computeServer, true).blockingGet()
-						computeServer = context.async.computeServer.get(computeServer.id).blockingGet()
-					}
-				}
-
-			}
-
-		} catch(e) {
-			computeServer.status = 'provisioned'
-			computeServer.statusMessage = "Unable to resize server: ${e.message}"
-			computeServer = saveAndGet(computeServer)
-			rtn.success = false
-		}
-		return rtn
-	}
-
 	def buildStorageVolume(computeServer, volumeAdd, addDiskResults, newCounter) {
 		def newVolume = new StorageVolume(
 				refType		: 'ComputeZone',
@@ -1034,5 +911,193 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				deviceDisplayName : getDiskDisplayName(newCounter)
 		)
 		return newVolume
+	}
+
+	def internalResizeServer(ComputeServer server, ResizeRequest resizeRequest, Map opts = [:]) {
+		ServiceResponse rtn = ServiceResponse.success()
+		def authConfigMap = plugin.getAuthConfig(server.cloud)
+		ServicePlan plan = resizeRequest.plan
+
+		try {
+			server.status = 'resizing'
+			server = saveAndGet(server)
+
+			//sizing
+			def requestedMemory = resizeRequest.maxMemory
+			def requestedCores = resizeRequest?.maxCores
+			def currentMemory = server.maxMemory ?: server.getConfigProperty('maxMemory')?.toLong()
+			def currentCores = server.maxCores ?: 1
+			def neededMemory = requestedMemory - currentMemory
+			def neededCores = (requestedCores ?: 1) - (currentCores ?: 1)
+			def doStop = (plan?.id != server.plan?.id || neededMemory != 0 || neededCores != 0 || resizeRequest.volumesUpdate)
+			if(doStop) {
+				def waitResults = UpcloudApiService.waitForServerStatus(authConfigMap, server.externalId, 'stopped')
+				if (waitResults.success != true) {
+					throw new Exception('error stopping vm ' + (waitResults.msg ?: ''))
+				}
+			}
+
+			if(neededMemory != 0 || neededCores != 0) {
+				//resize it
+				def resizeOpts
+				if(plan?.id != server.plan?.id)
+					resizeOpts = [planRef:plan.externalId]
+				else {
+					resizeOpts = [maxCores:requestedCores, maxMemory:requestedMemory]
+				}
+				def resizeResults = UpcloudApiService.resizeServer(authConfigMap, server.externalId, resizeOpts)
+				if(resizeResults.success == true) {
+					server.plan = plan
+					server.maxMemory = requestedMemory.toLong()
+					server.maxCores = (requestedCores ?: 1).toLong()
+					server.setConfig('maxMemory', plan.maxMemory)
+					server = saveAndGet(server)
+				} else {
+					throw new Exception('error on resize ' + (resizeResults.msg ?: ''))
+				}
+			}
+			//disk sizes
+//			def maxStorage = 0
+//			maxStorage = resizeRequest.maxStorage
+			def newCounter = server.volumes?.size()
+			def allStorageVolumeTypes
+			if (resizeRequest.volumesUpdate || resizeRequest.volumesAdd) {
+				allStorageVolumeTypes = morpheus.async.storageVolume.storageVolumeType.listAll().toMap { it.id }.blockingGet()
+			}
+
+			resizeRequest.volumesAdd?.each { newVolumeProps ->
+				// new disk add it
+				log.info("Adding New Volume")
+				//new disk add it
+				if (!newVolumeProps.maxStorage) {
+					newVolumeProps.maxStorage = newVolumeProps.size ? (newVolumeProps.size.toDouble() * ComputeUtility.ONE_GIGABYTE).toLong() : 0
+				}
+
+				def zoneRef = server.cloud.getConfigMap().zone
+				def addDiskConfig = [name: newVolumeProps.name, zoneRef: zoneRef, serverName: server.name, maxStorage: newVolumeProps.volume.maxStorage]
+				def addDiskResults = UpcloudApiService.createStorage(authConfigMap, addDiskConfig)
+				log.debug("addDiskResults ${addDiskResults}")
+
+				if (!addDiskResults.success)
+					throw new Exception("error creating new volume: ${addDiskResults.msg ?: 'unknown'}")
+				def newVolumeId = addDiskResults.data.storage.uuid
+				def checkReadyResult = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
+				if (!checkReadyResult.success)
+					throw new Exception("volume never became ready: ${checkReadyResult.msg ?: 'unknown'}")
+				// Attach the new one
+				def attachResults = UpcloudApiService.attachStorage(authConfigMap, server.externalId, newVolumeId, newCounter)
+				if (!attachResults.success)
+					throw new Exception("volume failed to attach: ${attachResults.msg ?: 'unknown'}")
+				def waitAttachResults = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
+				if (!waitAttachResults.success)
+					throw new Exception("volume never attached: ${waitAttachResults.msg ?: 'unknown'}")
+
+				def containerServer = morpheus.services.computeServer.get(server.id)
+				def volumeType = allStorageVolumeTypes[newVolumeProps.storageType.toLong()] // 'upcloudVolume'
+				def newVolume = buildStorageVolume(containerServer.account, containerServer, newVolumeProps.volume, newCounter)
+				def deviceName =  getDiskName(newCounter)
+				def deviceAddress = attachResults.address ?: deviceName
+				newVolume.type = volumeType
+				newVolume.maxStorage = newVolumeProps.volume.maxStorage
+				newVolume.externalId = newVolumeId
+				newVolume.internalId = deviceAddress
+				newVolume.deviceName = deviceName
+				newVolume.deviceDisplayName = extractDiskDisplayName(deviceAddress)
+				log.info("Saving Volume")
+				morpheus.async.storageVolume.create([newVolume], server).blockingGet()
+				server = morpheus.async.computeServer.get(server.id).blockingGet()
+				newCounter++
+			}
+
+			resizeRequest.volumesUpdate?.each { volumeUpdate ->
+				StorageVolume existing = volumeUpdate.existingModel
+				Map updateProps = volumeUpdate.updateProps
+				if (existing) {
+					if (updateProps.maxStorage > existing.maxStorage) {
+						def volumeId = existing.externalId
+						def storageVolumeId = existing.id
+						def resizeResults = UpcloudApiService.resizeStorage(authConfigMap, volumeId, [maxStorage: volumeUpdate.volume.maxStorage])
+						log.debug("resizeResults ${resizeResults}")
+
+						if (resizeResults.success == true) {
+							def existingVolume = context.async.storageVolume.get(existing.id).blockingGet()
+							if (existingVolume) {
+								existingVolume.maxStorage = updateProps?.maxStorage
+								context.async.storageVolume.save(existingVolume).blockingGet()
+							} else {
+								log.warn("resize volume could not find existing volume to update: ${storageVolumeId}")
+							}
+						}
+					}
+				} else {
+					// new disk add it
+					if (!updateProps.maxStorage) {
+						updateProps.maxStorage = updateProps.size ? (updateProps.size.toDouble() * ComputeUtility.ONE_GIGABYTE).toLong() : 0
+					}
+
+					def zoneRef = server.cloud.getConfigMap().zone
+					def addDiskConfig = [name: updateProps.name, zoneRef: zoneRef, serverName: server.name, maxStorage: updateProps.volume.maxStorage]
+					def addDiskResults = UpcloudApiService.createStorage(authConfigMap, addDiskConfig)
+					log.debug("addDiskResults ${addDiskResults}")
+
+					if (!addDiskResults.success)
+						throw new Exception("error creating new volume: ${addDiskResults.msg ?: 'unknown'}")
+					def newVolumeId = addDiskResults.data.storage.uuid
+					def checkReadyResult = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
+					if (!checkReadyResult.success)
+						throw new Exception("volume never became ready: ${checkReadyResult.msg ?: 'unknown'}")
+					// Attach the new one
+					def attachResults = UpcloudApiService.attachStorage(authConfigMap, server.externalId, newVolumeId, newCounter)
+					if (!attachResults.success)
+						throw new Exception("volume failed to attach: ${attachResults.msg ?: 'unknown'}")
+					def waitAttachResults = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
+					if (!waitAttachResults.success)
+						throw new Exception("volume never attached: ${waitAttachResults.msg ?: 'unknown'}")
+
+					def containerServer = morpheus.services.computeServer.get(server.id)
+					def volumeType = allStorageVolumeTypes[updateProps.storageType.toLong()] // 'upcloudVolume'
+					def newVolume = buildStorageVolume(containerServer.account, containerServer, updateProps.volume, newCounter)
+					def deviceName = getDiskName(newCounter)
+					def deviceAddress = attachResults.address ?: deviceName
+					newVolume.type = volumeType
+					newVolume.maxStorage = updateProps.volume.maxStorage
+					newVolume.externalId = newVolumeId
+					newVolume.internalId = deviceAddress
+					newVolume.deviceName = deviceName
+					newVolume.deviceDisplayName = extractDiskDisplayName(deviceAddress)
+					log.info("Saving Volume")
+					morpheus.async.storageVolume.create([newVolume], server).blockingGet()
+					server = morpheus.async.computeServer.get(server.id).blockingGet()
+					newCounter++
+				}
+			}
+
+			resizeRequest.volumesDelete.each { volume ->
+				log.info("deleting volume : ${volume.externalId}")
+				def volumeId = volume.externalId
+				def volumeAddress = volume.internalId
+				if(volumeAddress) {
+					def detachResults = UpcloudApiService.detachStorage(authConfigMap, server.externalId, volumeAddress)
+					if(detachResults.success == true) {
+						UpcloudApiService.removeStorage(authConfigMap, volumeId)
+						morpheus.async.storageVolume.remove([volume], server, true).blockingGet()
+					}
+				}
+			}
+			server.status = 'provisioned'
+			server = saveAndGet(server)
+
+			if(doStop == true) {
+				def waitResults = UpcloudApiService.waitForServerStatus(authConfigMap, server.externalId, 'running')
+			}
+
+			rtn.success = true
+		} catch(ex) {
+			log.error("Error resizing instance to ${plan.name}", ex)
+			rtn.success = false
+			rtn.msg = "Error resizing instance to ${plan.name} ${ex.getMessage()}"
+			rtn.error= "Error resizing instance to ${plan.name} ${ex.getMessage()}"
+		}
+		return rtn
 	}
 }
