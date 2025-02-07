@@ -4,20 +4,25 @@ import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupExecutionProvider
 import com.morpheusdata.core.backup.response.BackupExecutionResponse
+import com.morpheusdata.core.backup.util.BackupStatusUtility
 import com.morpheusdata.model.Backup
 import com.morpheusdata.model.BackupResult
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.ComputeServer
+import com.morpheusdata.model.Instance
+import com.morpheusdata.model.StorageVolume
+import com.morpheusdata.model.Workload
 import com.morpheusdata.response.ServiceResponse
+import com.morpheusdata.upcloud.services.UpcloudApiService
 import groovy.util.logging.Slf4j
 
 @Slf4j
 class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 
-	Plugin plugin
+	UpcloudPlugin plugin
 	MorpheusContext morpheusContext
 
-	UpcloudBackupExecutionProvider(Plugin plugin, MorpheusContext morpheusContext) {
+	UpcloudBackupExecutionProvider(UpcloudPlugin plugin, MorpheusContext morpheusContext) {
 		this.plugin = plugin
 		this.morpheusContext = morpheusContext
 	}
@@ -138,7 +143,82 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 	 */
 	@Override
 	ServiceResponse<BackupExecutionResponse> executeBackup(Backup backup, BackupResult backupResult, Map executionConfig, Cloud cloud, ComputeServer computeServer, Map opts) {
-		return ServiceResponse.success(new BackupExecutionResponse(backupResult))
+		ServiceResponse<BackupExecutionResponse> rtn = ServiceResponse.prepare(new BackupExecutionResponse(backupResult))
+
+		try {
+			log.debug("backupConfig container: {}", rtn)
+
+			Workload workload = morpheus.services.workload.get(rtn.containerId)
+			Instance instance = morpheus.services.instance.get(workload.instanceId)
+			def snapshotName = "${instance.name}.${workload.id}.${System.currentTimeMillis()}".toString()
+
+			//sync for non windows
+			if(computeServer.serverOs?.platform != 'windows') {
+				morpheus.executeCommandOnServer(computeServer, 'sync')
+			}
+
+			//auth config
+			def authConfig = plugin.getAuthConfig(cloud)
+			def serverStatus = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'started')
+
+			//create the backup for each disk
+			def snapshotResults = []
+			def snapshotSuccess = true
+			computeServer.volumes?.each { StorageVolume volume ->
+				if(volume.externalId) {
+					def snapshotConfig = [snapshotName:snapshotName]
+					def snapShotStartResult = UpcloudApiService.waitForStorageStatus(authConfig, volume.externalId, 'online', [maxAttempts:360, retryInterval:(1000l * 10l)])
+					def snapshotResult = UpcloudApiService.createSnapshot(authConfig, volume.externalId, snapshotConfig)
+					if(snapShotStartResult.success == false && !snapshotResult.msg) {
+						snapshotResult.msg = "Storage state invalid."
+					}
+					snapshotSuccess = snapShotStartResult.success && snapshotResult.success && snapshotSuccess
+					snapshotResults << [volume: volume, snapshotResult: snapshotResult]
+				}
+			}
+			log.info("backup complete: {}", snapshotResults)
+			if(snapshotSuccess == true) {
+				def totalSize = (snapshotResults.snapshotResult?.data?.storage?.sum() ?: 0) * 1024
+
+				def snapshots = []
+				snapshotResults?.each {
+					def storageResults = it.snapshotResult.data?.storage
+					StorageVolume volume = it.volume
+					if(storageResults?.uuid)
+						snapshots << [root: volume.rootVolume, sizeInGb: storageResults.size, originId:storageResults.origin, storageId:storageResults.uuid]
+				}
+
+				rtn.success = true
+				rtn.data.backupResult.status = BackupStatusUtility.IN_PROGRESS
+				rtn.data.backupResult.backupResultId = rtn.backupResultId
+				rtn.data.backupResult.backupSizeInMb = totalSize
+				rtn.data.backupResult.providerType = 'upcloud'
+				rtn.data.backupResult.setConfigProperty("snapshots", snapshots)
+				rtn.data.updates = true
+			} else {
+				//error
+				def errorSnapshots = snapshotResults.findAll{ it.snapshotResult.success != true && it.snapshotResult.msg }
+				def errorMessage = errorSnapshots?.collect{ it.snapshotResult.msg }?.join('\n') ?: 'unknown error creating snapshots'
+				rtn.data.backupResult.backupSizeInMb = 0
+				rtn.data.backupResult.errorOutput = errorMessage
+				rtn.data.backupResult.status = BackupStatusUtility.FAILED
+				rtn.data.updates = true
+			}
+			if(snapshotSuccess == true && opts.inline) {
+				snapshotResults.each { snapshotResult ->
+					def snapshotStatus = UpcloudApiService.waitForStorageStatus(authConfig, snapshotResult.data?.storage?.uuid, 'online')
+				}
+				refreshBackupResult(backupResult)
+			}
+		} catch(e) {
+			log.error("executeBackup: ${e}", e)
+			rtn.msg = e.getMessage()
+			rtn.data.backupResult.errorOutput = "Failed to execute backup".encodeAsBase64()
+			rtn.data.backupResult.backupSizeInMb = 0
+			rtn.data.backupResult.status = BackupStatusUtility.FAILED
+			rtn.data.updates = true
+		}
+		return rtn
 	}
 
 	/**
