@@ -5,6 +5,7 @@ import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupExecutionProvider
 import com.morpheusdata.core.backup.response.BackupExecutionResponse
 import com.morpheusdata.core.backup.util.BackupStatusUtility
+import com.morpheusdata.core.util.DateUtility
 import com.morpheusdata.model.Backup
 import com.morpheusdata.model.BackupResult
 import com.morpheusdata.model.Cloud
@@ -231,7 +232,48 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 	 */
 	@Override
 	ServiceResponse<BackupExecutionResponse> refreshBackupResult(BackupResult backupResult) {
-		return ServiceResponse.success(new BackupExecutionResponse(backupResult))
+		ServiceResponse<BackupExecutionResponse> rtn = ServiceResponse.prepare(new BackupExecutionResponse(backupResult))
+
+		try {
+			log.debug("syncBackupResult {}", backupResult)
+			def config = backupResult.getConfigMap()
+			def snapshotList = config.snapshotList
+
+			if (snapshotList?.size() > 0) {
+				def workload = morpheus.services.workload.get(backupResult.containerId)
+				def instance = morpheus.services.instance.get(workload.instanceId)
+				def server = morpheus.computeServer.get(workload.serverId)
+				def cloud = morpheus.services.cloud.get(server.zoneId)
+				//auth config
+				def authConfig = UpcloudPlugin.getAuthConfig(cloud)
+				def statusResults = []
+				def statusSuccess = true
+				def statusComplete = true
+				def totalSize = 0
+				snapshotList?.each { snapshot ->
+					def statusResult = UpcloudApiService.getStorageDetails(authConfig, snapshot.storageId)
+					statusResults << statusResult
+					statusSuccess = statusResult.success && statusSuccess
+					statusComplete = statusComplete && (statusResult.data?.storage?.state == 'online')
+					totalSize += (statusResult.data?.storage?.size?.toLong() ?: 0)
+				}
+				if (statusSuccess == true && statusComplete == true) {
+					rtn.data.updates = true
+					rtn.data.backupResult.status = "SUCCEEDED"
+					rtn.data.backupResult.endDate = new Date()
+					rtn.data.backupResult.setConfigProperty("sizeInGb", totalSize)
+					rtn.data.backupResult.sizeInMb = (long) (totalSize * 1024l)
+
+					def startDate = DateUtility.parseDate(backupResult.startDate)
+					def endDate = rtn.data.backupResult.endDate
+					if (startDate && endDate)
+						rtn.data.backupResult.durationMillis = endDate.time - startDate.time
+				}
+			}
+		} catch (Exception e) {
+			log.error("refreshBackupResult error: {}", e, e)
+		}
+		return rtn
 	}
 	
 	/**
