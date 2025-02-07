@@ -103,7 +103,35 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 	 */
 	@Override
 	ServiceResponse deleteBackupResult(BackupResult backupResult, Map opts) {
-		return ServiceResponse.success()
+		def rtn = ServiceResponse.success()
+		try {
+			def config = backupResult.getConfigMap()
+			def snapshotList = config.snapshotList
+			if(snapshotList?.size() > 0) {
+				def workload = morpheus.async.workload.get(backupResult.containerId).blockingGet()
+				if(workload) {
+					def instance = workload?.instance
+					def server = workload?.server
+					def cloud = server?.cloud
+					//auth config
+					def authConfig = UpcloudApiService.getAuthConfig(cloud)
+					//delete
+					def deleteSuccess = true
+					snapshotList?.each { snapshot ->
+						def deleteResult = UpcloudApiService.removeStorage(authConfig, snapshot.storageId)
+						deleteSuccess = deleteSuccess && deleteResult.success
+					}
+					if(!deleteSuccess) {
+						rtn.success = false
+					}
+				}
+
+			}
+		} catch(e) {
+			log.error("An Exception Has Occurred",e)
+			rtn.success = false
+		}
+		return rtn
 	}
 
 	/**
