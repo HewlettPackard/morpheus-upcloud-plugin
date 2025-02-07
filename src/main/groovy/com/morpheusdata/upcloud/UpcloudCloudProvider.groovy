@@ -508,7 +508,15 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		log.debug("startServer: ${computeServer}")
+		def rtn = [success:false]
+		try {
+			return UpcloudProvisionProvider.startServer(computeServer)
+		} catch(e) {
+			rtn.msg = "Error starting server: ${e.message}"
+			log.error("startServer error: ${e}", e)
+		}
+		return ServiceResponse.create(rtn)
 	}
 
 	/**
@@ -519,7 +527,15 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse stopServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		log.debug("stopServer: ${computeServer}")
+		def rtn = [success:false]
+		try {
+			return UpcloudProvisionProvider.stopServer(computeServer)
+		} catch(e) {
+			rtn.msg = "Error stoping server: ${e.message}"
+			log.error("stopServer error: ${e}", e)
+		}
+		return ServiceResponse.create(rtn)
 	}
 
 	/**
@@ -529,7 +545,28 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse deleteServer(ComputeServer computeServer) {
-		return ServiceResponse.success()
+		log.debug("deleteServer: ${computeServer}")
+		if(computeServer?.externalId && (computeServer.managed == true || computeServer.computeServerType?.controlPower)) {
+			def authConfig = plugin.getAuthConfig(computeServer.cloud)
+			def stopResults = UpcloudApiService.stopServer(authConfig, computeServer.externalId)
+			def statusResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'stopped')
+			if (statusResults.success) {
+				def removeResults = UpcloudApiService.removeServer(authConfig, computeServer.externalId)
+				if(removeResults.success) {
+					computeServer.volumes?.each { volume ->
+						if(volume.externalId) {
+							def volumeResults = UpcloudApiService.removeStorage(authConfig, volume.externalId)
+						}
+					}
+				}
+				return ServiceResponse.success()
+			} else {
+				return ServiceResponse.error('Failed to stop server')
+			}
+		} else {
+			log.info("deleteServer - ignoring request for unmanaged instance")
+		}
+		ServiceResponse.success()
 	}
 
 	/**
