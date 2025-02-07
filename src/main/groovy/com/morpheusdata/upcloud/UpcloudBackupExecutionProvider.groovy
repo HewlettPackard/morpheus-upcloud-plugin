@@ -110,9 +110,9 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 			if(snapshotList?.size() > 0) {
 				def workload = morpheus.async.workload.get(backupResult.containerId).blockingGet()
 				if(workload) {
-					def instance = workload?.instance
-					def server = workload?.server
-					def cloud = server?.cloud
+					def instance = morpheus.async.instance.get(workload.instanceId).blockingGet()
+					def server = morpheus.async.computeServer.get(workload.serverId).blockingGet()
+					def cloud = morpheus.async.cloud.get(server.zoneId).blockingGet()
 					//auth config
 					def authConfig = UpcloudApiService.getAuthConfig(cloud)
 					//delete
