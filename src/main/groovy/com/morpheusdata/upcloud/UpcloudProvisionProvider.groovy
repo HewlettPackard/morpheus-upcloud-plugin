@@ -3,6 +3,7 @@ package com.morpheusdata.upcloud
 import com.morpheusdata.core.AbstractProvisionProvider
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
+import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.providers.ProvisionProvider
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
@@ -36,6 +37,7 @@ import com.morpheusdata.response.ProvisionResponse
 import com.morpheusdata.response.ServiceResponse
 import com.morpheusdata.upcloud.services.UpcloudApiService
 import groovy.util.logging.Slf4j
+import org.apache.tools.ant.types.spi.Service
 
 @Slf4j
 class UpcloudProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, ProvisionProvider.BlockDeviceNameFacet {
@@ -105,7 +107,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					fieldName:'noAgent', fieldCode: 'gomorpheus.optiontype.SkipAgentInstall', fieldLabel:'Skip Agent Install', fieldContext:'config', fieldGroup:'Advanced Options', required:false, enabled:true,
 					editable:false, global:false, placeHolder:null, helpBlock:'Skipping Agent installation will result in a lack of logging and guest operating system statistics. Automation scripts may also be adversely affected.', defaultValue:null, custom:false, displayOrder:4, fieldClass:null),
 			new OptionType(code:'containerType.upcloud.imageId', inputType:OptionType.InputType.SELECT, name:'imageType', category:'containerType.upcloud', optionSource: 'upcloudImage', optionSourceType:'upcloud',
-					fieldName:'imageId', fieldCode: 'gomorpheus.optiontype.Image', fieldLabel:'Image', fieldContext:'config', required:false, enabled:true, editable:false, global:false,
+					fieldName:'imageId', fieldCode: 'gomorpheus.optiontype.Image', fieldLabel:'Image', fieldContext:'config', required:true, enabled:true, editable:false, global:false,
 					placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:3, fieldClass:null)
 		]
 		// TODO: create some option types for provisioning and add them to collection
@@ -176,6 +178,45 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		return ServiceResponse.success()
 	}
 
+	Boolean canAddVolumes() {
+		return true
+	}
+
+	Boolean canCustomizeDataVolumes() {
+		return true
+	}
+
+	def buildDataDisk(volume) {
+		return [id:volume.id, diskType:volume?.type?.code ?: 'upcloudVolume', maxStorage:volume.maxStorage, name:volume.name,
+				deviceName:volume.deviceName, displayOrder:volume.displayOrder]
+	}
+
+	def buildDataDisks(volumes) {
+		def rtn = []
+		volumes?.each { volume ->
+			rtn << buildDataDisk(volume)
+		}
+		return rtn
+	}
+
+	def cleanInstanceName(name) {
+		def rtn = name.replaceAll(/[^a-zA-Z0-9\.\-]/,'')
+		return rtn
+	}
+
+	def insertImage(Map runConfig, Map opts) {
+		def taskResults = [success:false, imageId:runConfig.virtualImage.id, virtualImage:runConfig.virtualImage]
+		try {
+			log.info("imageUploadId: ${runConfig.virtualImage.id}")
+			taskResults.success = true
+			log.info("imageUploadTask: ${taskResults}")
+		} catch(imageException) {
+			log.error("imageException: ${imageException}", imageException)
+			taskResults.message = 'Error uploading image'
+		}
+		return taskResults
+	}
+
 	/**
 	 * This method is a key entry point in provisioning a workload. This could be a vm, a container, or something else.
 	 * Information associated with the passed Workload object is used to kick off the workload provision request
@@ -190,23 +231,147 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	ServiceResponse<ProvisionResponse> runWorkload(Workload workload, WorkloadRequest workloadRequest, Map opts) {
 		log.debug "runWorkload: ${workload} ${workloadRequest} ${opts}"
 		ProvisionResponse provisionResponse = new ProvisionResponse(success: true)
-		ComputeServer server = workload.server
-		try {
-			Cloud cloud = server.cloud
-			VirtualImage virtualImage = server.sourceImage
-			def runConfig = buildWorkloadRunConfig(workload, workloadRequest, virtualImage, opts)
 
-			runVirtualMachine(runConfig, provisionResponse, opts)
-			log.info("Checking Server Interfaces....")
-			workload.server.interfaces?.each { netInt ->
-				log.info("Net Interface: ${netInt.id} -> Network: ${netInt.network?.id}")
+//		ComputeServer server = workload.server
+//		try {
+//			Cloud cloud = server.cloud
+//			VirtualImage virtualImage = server.sourceImage
+//			def runConfig = buildWorkloadRunConfig(workload, workloadRequest, virtualImage, opts)
+//
+//			runVirtualMachine(runConfig, provisionResponse, opts)
+//			log.info("Checking Server Interfaces....")
+//			workload.server.interfaces?.each { netInt ->
+//				log.info("Net Interface: ${netInt.id} -> Network: ${netInt.network?.id}")
+//			}
+//			provisionResponse.noAgent = opts.noAgent ?: false
+//			return new ServiceResponse<ProvisionResponse>(success: true, data: provisionResponse)
+//		} catch (e) {
+//			log.error "runWorkload: ${e}", e
+//			provisionResponse.setError(e.message)
+//			return new ServiceResponse(success: false, msg: e.message, error: e.message, data: provisionResponse)
+//		}
+
+		try {
+			def containerConfig = workload.getConfigMap()
+			log.info("containerConfig: ${containerConfig}")
+			def server = workload.server
+			log.info("server: ${server}")
+			def cloud = server.cloud
+			log.info("cloud: ${cloud}")
+			def account = server.account
+			log.info("account: ${account}")
+			def cloudConfig = cloud.getConfigMap()
+			log.info("cloudConfig: ${cloudConfig}")
+
+			def authConfig = plugin.getAuthConfig(cloud)
+			opts.noAgent = containerConfig.noAgent
+			opts.findAdminPassword = true
+			def imageType = containerConfig.imageType ?: 'default'
+			def virtualImageId = (containerConfig.imageId?.toLong() ?: containerConfig.template?.toLong() ?: server.sourceImage.id)
+			def virtualImage = morpheus.async.virtualImage.get(virtualImageId).blockingGet()
+			if(virtualImage) {
+				def rootVolume = workload.server.volumes?.find{ it.rootVolume == true}
+				def dataDisks = workload.server.volumes?.findAll{ it.rootVolume == false}?.sort{it.id}
+				def servicePlan = workload.instance.plan
+				def runConfig = [
+						containerId: workload.id,
+						instanceId: workload.instance.id,
+						account: account,
+						zone: cloud,
+						name: cleanInstanceName(server.name),
+						zoneRef: cloudConfig.zone,
+						hostname: server.getExternalHostname(),
+						userData: null,
+						externalId: server.externalId,
+						serverId: server.id,
+						virtualImage: virtualImage,
+						dataDisks: dataDisks,
+						rootVolume: rootVolume,
+						container: workload,
+						callbackService: opts.callbackService,
+						server: workload.server,
+						diskList: [],
+						domainName: server.getExternalDomain(),
+						authConfig: authConfig,
+						serverInterfaces: server.interfaces,
+						osType: (virtualImage.osType?.platform?.toString() == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform,
+						platform: (virtualImage.osType?.platform?.toString() == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform,
+						//userConfig: workloadRequest.usersConfiguration
+				]
+
+				if(servicePlan.internalId == 'custom') {
+					runConfig.maxMemory = workload.maxMemory ?: servicePlan.maxMemory
+					runConfig.maxCores = workload.maxCores ?: servicePlan.maxCores
+				} else {
+					runConfig.planRef = servicePlan.externalId
+					runConfig.tier = servicePlan.getConfigProperty('tier')
+				}
+				runConfig.fqdn = runConfig.hostName + '.' + runConfig.domainName
+
+				log.info("runConfig: ${runConfig}")
+
+				if(opts.cloneContainerId && opts.backupSetId) {
+					def snapshot = morpheus.services.backup.backupResult.list(
+							new DataQuery().withFilter("backupSetId", opts.backupSetId)
+							.withFilter("containerId", opts.cloneContainerId)
+					).find{ it.backupSetId == opts.backupSetId }
+					def rootSnapshot = snapshot?.snapshotList?.find{ it.root }
+					if(rootSnapshot && rootSnapshot.storageId) {
+						log.info("creating server from snapshot image: ${rootSnapshot.storageId}")
+						runConfig.cloneImageId = rootSnapshot.storageId
+					}
+					// Handle any data disks
+					def dataSnapshots = snapshot?.snapshotList?.findAll { !it.root }
+					dataSnapshots?.each { dataSnapshot ->
+						def dataDisk = runConfig.dataDisks?.find { !it.snapshotUUID && (int)it.maxStorage.div(ComputeUtility.ONE_GIGABYTE) == (int)dataSnapshot.sizeInGb }
+						dataDisk.snapshotUUID = dataSnapshot.storageId
+					}
+				}
+				// upload or insert image
+				def imageUploadResults = insertImage(runConfig, opts)
+				log.info("insertImage results: ${imageUploadResults}")
+
+				if(imageUploadResults.success == true) {
+					try {
+						log.info("imageUploadTask onComplete: ${imageUploadResults}")
+						if (imageUploadResults.success == true && imageUploadResults.imageId) {
+							log.info("imageUploadResults.virtualImage.id: ${imageUploadResults?.virtualImage}, ${imageUploadResults?.virtualImage?.id}")
+							log.info("runConfig.virtualImage.id: ${runConfig.virtualImage.id}")
+							runConfig.virtualImage = morpheus.async.virtualImage.get(imageUploadResults?.virtualImage?.id ?: runConfig.virtualImage.id).blockingGet()
+							log.info("runConfig.virtualImage: ${runConfig.virtualImage}")
+							runConfig.imageRef = runConfig.virtualImage.externalId
+							opts.installAgent = opts.noAgent ? false : runConfig.virtualImage.installAgent
+
+							runVirtualMachine(runConfig, provisionResponse, opts)
+							log.info("after run virtual machine")
+						} else {
+							provisionResponse.setError(imageUploadResults.message)
+							return new ServiceResponse(success: false, msg: imageUploadResults.message, e: null, data: provisionResponse)
+						}
+					} catch (e) {
+						provisionResponse.setError("failed to acquire additional virtual image information: ${e}")
+						return new ServiceResponse(success: false, msg: "failed to acquire additional virtual image information: ${e}", error: e, data: provisionResponse)
+					}
+				} else {
+					log.error("image upload task error: ${imageUploadResults.message}")
+					provisionResponse.setError("failed to upload image file")
+					return new ServiceResponse(success: false, msg: 'failed to upload image file', error: null, data: provisionResponse)
+				}
+
+			} else {
+				provisionResponse.setError("virtual image not found")
+				return new ServiceResponse(success: false, msg: 'virtual image not found', error: null, data: provisionResponse)
 			}
-			provisionResponse.noAgent = opts.noAgent ?: false
-			return new ServiceResponse<ProvisionResponse>(success: true, data: provisionResponse)
+
+			if(provisionResponse.success != true) {
+				return new ServiceResponse(success: false, msg: provisionResponse.message ?: 'vm config error', error: provisionResponse.message, data: provisionResponse)
+			} else {
+				return new ServiceResponse<ProvisionResponse>(success: true, data: provisionResponse)
+			}
 		} catch (e) {
-			log.error "runWorkload: ${e}", e
-			provisionResponse.setError(e.message)
-			return new ServiceResponse(success: false, msg: e.message, error: e.message, data: provisionResponse)
+			log.error "runWorkload error: ${e}", e
+			provisionResponse.setError("Failed to create server: ${e.message}")
+			return new ServiceResponse(success: false, msg: e.message, error: e, data: provisionResponse)
 		}
 	}
 
@@ -233,7 +398,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			if(workload.server?.externalId) {
 				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
 				def statusResults = UpcloudApiService.waitForServerNotStatus(authConfigMap, workload.server.externalId, 'maintenance')
-				def stopResults = UpcloudProvisionProvider.stopServer(workload.server)
+				def stopResults = stopServer(workload.server)
 				if(stopResults.success == true) {
 					rtn.success = true
 				}
@@ -261,7 +426,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			if(workload.server?.externalId) {
 				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
 				def statusResults = UpcloudApiService.waitForServerNotStatus(authConfigMap, workload.server.externalId, 'maintenance')
-				def startResults = UpcloudProvisionProvider.startServer(workload.server)
+				def startResults = startServer(workload.server)
 				log.debug("startWorkload: startResults: ${startResults}")
 				if(startResults.success == true) {
 					rtn.success = true
@@ -353,13 +518,16 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse stopServer(ComputeServer computeServer) {
-		log.debug("stopServer: ${computeServer}")
+		log.info("calling stop server provision provider: ${computeServer}")
 		if(computeServer.managed == true || computeServer.computeServerType?.controlPower) {
 			def authConfig = plugin.getAuthConfig(computeServer.cloud)
 			def statusResults = UpcloudApiService.waitForServerNotStatus(authConfig, computeServer.externalId, 'maintenance')
+			log.info("status results: ${statusResults}")
 			def stopResults = UpcloudApiService.stopServer(authConfig, computeServer.externalId)
+			log.info("stop results: ${stopResults}")
 			if (stopResults.success) {
 				def waitResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'stopped')
+				log.info("wait results: ${waitResults}")
 				if(waitResults.success) {
 					return ServiceResponse.success()
 				} else {
@@ -371,7 +539,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		} else {
 			log.info("stopServer - ignoring request for unmanaged instance")
 		}
-		ServiceResponse.success()
+		return ServiceResponse.success()
 	}
 
 	/**
@@ -381,13 +549,16 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
-		log.debug("startServer: ${computeServer}")
+		log.info("calling start server provision provider: ${computeServer}")
 		if(computeServer.managed == true || computeServer.computeServerType?.controlPower) {
 			def authConfig = plugin.getAuthConfig(computeServer.cloud)
 			def statusResults = UpcloudApiService.waitForServerNotStatus(authConfig, computeServer.externalId, 'maintenance')
+			log.info("status results: ${statusResults}")
 			def startResults = UpcloudApiService.startServer(authConfig, computeServer.externalId)
+			log.info("start results: ${startResults}")
 			if(startResults.success == true) {
 				def waitResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'running')
+				log.info("wait results: ${waitResults}")
 				if(waitResults.success) {
 					return ServiceResponse.success()
 				} else {
@@ -399,7 +570,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		} else {
 			log.info("startServer - ignoring request for unmanaged instance")
 		}
-		ServiceResponse.success()
+		return ServiceResponse.success()
 	}
 
 	/**
@@ -462,7 +633,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		def taskResults = [success:false]
 		ComputeServer server = runConfig.server
 		Account account = server.account
-		opts.createUserList = runConfig.userConfig.createUsers
+		//opts.createUserList = runConfig.userConfig.createUsers
 
 		//save server
 		// runConfig.server = saveAndGet(server)
@@ -470,30 +641,37 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 		//set install agent
 		runConfig.installAgent = runConfig.noAgent && server.cloud.agentMode != 'cloudInit'
-
+		log.info("RUNCONFIG ROOT VOLUME DISK TYPE: ${runConfig.rootVolume.diskType}")
 		def createResults = UpcloudApiService.createServer(runConfig.authConfig, runConfig)
 		log.info("create server results success ${createResults.success}")
 		log.debug("Upcloud Create Server Results: {}",createResults)
 		if(createResults.success == true && createResults.server) {
 			server.externalId = createResults.externalId
 			server.sshPassword = createResults.server.password ?: runConfig.server.sshPassword
-			server.region = new CloudRegion(code: server.resourcePool.regionCode)
+			//server.region = new CloudRegion(code: server.resourcePool.regionCode)
 			provisionResponse.externalId = server.externalId
 			server = saveAndGet(server)
 			runConfig.server = server
 
 			UpcloudApiService.waitForServerExists(runConfig.authConfig, createResults.externalId)
+			log.info("wait for server exists complete")
 			// wait for ready
 			def statusResults = UpcloudApiService.checkServerReady(runConfig.authConfig, createResults.externalId)
+			log.info("check server ready: ${statusResults.success}")
 			if (statusResults.success == true) {
 				//good to go
 				def serverDetails = UpcloudApiService.getServerDetail(runConfig.authConfig, createResults.externalId)
+				log.info("server details success: ${serverDetails.success}")
 				if (serverDetails.success == true) {
 					log.debug("server details: {}", serverDetails)
+					log.info("server detail networks: ${serverDetails.networks}")
+					log.info("server detail server: ${serverDetails.server}")
+
 					//update volume info
-					setRootVolumeInfo(runConfig.rootVolume, serverDetails.server)
+					setRootVolumeInfo(runConfig.rootVolume, runConfig.platform, serverDetails.volumes)
 					setVolumeInfo(runConfig.dataDisks, serverDetails.volumes)
 					setNetworkInfo(runConfig.serverInterfaces, serverDetails.networks)
+					log.info("volume info updated")
 					//update network info
 					def privateIp = serverDetails.server.'ip_addresses'?.'ip_address'?.find {
 						it.family == 'IPv4' && it.access == 'utility'
@@ -501,8 +679,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					def publicIp = serverDetails.server.'ip_addresses'?.'ip_address'?.find {
 						it.family == 'IPv4' && it.access == 'public'
 					}
+					log.info("private ip: ${privateIp}")
+					log.info("public ip: ${publicIp}")
+					log.info("network info updated")
 					def serverConfigOpts = [:]
-					applyComputeServerNetwork(server, privateIp, publicIp, null, null, serverConfigOpts)
+					applyComputeServerNetwork(server, privateIp.address, publicIp.address, null, null, serverConfigOpts)
 					taskResults.server = createResults.server
 					taskResults.success = true
 
@@ -515,6 +696,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		} else {
 			taskResults.message = createResults.msg
 		}
+		log.info("task results success: ${taskResults.success}, server: ${taskResults.server}")
 		return taskResults
 
 	}
@@ -522,6 +704,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	def finalizeVm(Map runConfig, ProvisionResponse provisionResponse, Map runResults) {
 		log.debug("runTask onComplete: provisionResponse: ${provisionResponse}")
 		ComputeServer server = context.async.computeServer.get(runConfig.serverId).blockingGet()
+		log.info("finalize vm server: ${server}")
 		try {
 			if(provisionResponse.success == true) {
 				server.status = 'provisioned'
@@ -530,7 +713,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				server.osDevice = '/dev/vda'
 				server.lvmEnabled = server.volumes?.size() > 1
 				server.managed = true
-				server.capacityInfo = new ComputeCapacityInfo(server:server, maxCores:server.plan?.maxCores ?: 1, maxMemory:server.plan?.maxMemory ?: ComputeUtility.ONE_GIGABYTE, maxStorage:runConfig.maxStorage)
+				server.capacityInfo = new ComputeCapacityInfo(maxCores:server.plan?.maxCores ?: 1, maxMemory:server.plan?.maxMemory ?: ComputeUtility.ONE_GIGABYTE, maxStorage:runConfig.maxStorage)
 				saveAndGet(server)
 			}
 		} catch(e) {
@@ -627,6 +810,8 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	}
 
 	private applyComputeServerNetwork(server, privateIp, publicIp = null, hostname = null, networkPoolId = null, configOpts = [:], index = 0, networkOpts = [:]) {
+		log.info("private ip in apply: ${privateIp}")
+		log.info("public ip in apply: ${publicIp}")
 		configOpts.each { k,v ->
 			server.setConfigProperty(k, v)
 		}
@@ -684,95 +869,96 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		return network
 	}
 
-	protected buildWorkloadRunConfig(Workload workload, WorkloadRequest workloadRequest, VirtualImage virtualImage, Map opts) {
-		log.debug("buildRunConfig: {}, {}, {}, {}", workload, workloadRequest, virtualImage, opts)
-		Map workloadConfig = workload.getConfigMap()
-		ComputeServer server = workload.server
-		Cloud cloud = server.cloud
-		StorageVolume rootVolume = server.volumes?.find{it.rootVolume == true}
+//	protected buildWorkloadRunConfig(Workload workload, WorkloadRequest workloadRequest, VirtualImage virtualImage, Map opts) {
+//		log.debug("buildRunConfig: {}, {}, {}, {}", workload, workloadRequest, virtualImage, opts)
+//		Map workloadConfig = workload.getConfigMap()
+//		ComputeServer server = workload.server
+//		Cloud cloud = server.cloud
+//		StorageVolume rootVolume = server.volumes?.find{it.rootVolume == true}
+//
+//		def maxMemory = server.maxMemory?.div(ComputeUtility.ONE_MEGABYTE)
+//		def maxStorage = rootVolume?.getMaxStorage() ?: opts.config?.maxStorage ?: server.plan.maxStorage
+//
+//		def runConfig = [:] + opts + buildRunConfig(server, virtualImage, workloadRequest.networkConfiguration, workloadConfig, opts)
+//
+//		runConfig += [
+//				name              : server.name,
+//				instanceId		  : workload.instance.id,
+//				containerId       : workload.id,
+//				account 		  : server.account,
+//				maxStorage        : maxStorage,
+//				maxMemory		  : maxMemory,
+//				applianceServerUrl: workloadRequest.cloudConfigOpts?.applianceUrl,
+//				workloadConfig    : workload.getConfigMap(),
+//				timezone          : (server.getConfigProperty('timezone') ?: cloud.timezone),
+//				proxySettings     : workloadRequest.proxyConfiguration,
+//				noAgent           : (opts.config?.containsKey("noAgent") == true && opts.config.noAgent == true),
+//				installAgent      : (opts.config?.containsKey("noAgent") == false || (opts.config?.containsKey("noAgent") && opts.config.noAgent != true)),
+//				userConfig        : workloadRequest.usersConfiguration,
+//				cloudConfig	      : workloadRequest.cloudConfigUser,
+//				networkConfig	  : workloadRequest.networkConfiguration
+//		]
+//
+//		return runConfig
+//
+//	}
 
-		def maxMemory = server.maxMemory?.div(ComputeUtility.ONE_MEGABYTE)
-		def maxStorage = rootVolume?.getMaxStorage() ?: opts.config?.maxStorage ?: server.plan.maxStorage
-
-		def runConfig = [:] + opts + buildRunConfig(server, virtualImage, workloadRequest.networkConfiguration, workloadConfig, opts)
-
-		runConfig += [
-				name              : server.name,
-				instanceId		  : workload.instance.id,
-				containerId       : workload.id,
-				account 		  : server.account,
-				maxStorage        : maxStorage,
-				maxMemory		  : maxMemory,
-				applianceServerUrl: workloadRequest.cloudConfigOpts?.applianceUrl,
-				workloadConfig    : workload.getConfigMap(),
-				timezone          : (server.getConfigProperty('timezone') ?: cloud.timezone),
-				proxySettings     : workloadRequest.proxyConfiguration,
-				noAgent           : (opts.config?.containsKey("noAgent") == true && opts.config.noAgent == true),
-				installAgent      : (opts.config?.containsKey("noAgent") == false || (opts.config?.containsKey("noAgent") && opts.config.noAgent != true)),
-				userConfig        : workloadRequest.usersConfiguration,
-				cloudConfig	      : workloadRequest.cloudConfigUser,
-				networkConfig	  : workloadRequest.networkConfiguration
-		]
-
-		return runConfig
-
-	}
-
-	protected buildRunConfig(ComputeServer server, VirtualImage virtualImage, NetworkConfiguration networkConfiguration, config, Map opts) {
-		log.debug("buildRunConfig: {}, {}, {}, {}, {}", server, virtualImage, networkConfiguration, config, opts)
-		def rootVolume = server.volumes?.find{it.rootVolume == true}
-		def dataDisks = server?.volumes?.findAll{it.rootVolume == false}?.sort{it.id}
-		def maxStorage
-		if(rootVolume) {
-			maxStorage = rootVolume.maxStorage
-		} else {
-			maxStorage = config.maxStorage ?: server.plan.maxStorage
-		}
-
-		def runConfig = [
-				serverId: server.id,
-				name: server.name,
-				vpcRef: server.resourcePool?.externalId,
-				zoneRef: server.cloudConfig.cloud,
-				server: server,
-				imageType: virtualImage.imageType,
-				osType: (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform,
-				platform: (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform,
-				kmsKeyId: config.kmsKeyId,
-				osDiskSize : maxStorage.div(ComputeUtility.ONE_GIGABYTE),
-				maxStorage : maxStorage,
-				osDiskType: rootVolume?.type?.name ?: 'gp2',
-				iops: rootVolume?.maxIOPS,
-				osDiskName:'/dev/sda1',
-				dataDisks: dataDisks,
-				rootVolume:rootVolume,
-				//cachePath: virtualImageService.getLocalCachePath(),
-				virtualImage: virtualImage,
-				hostname: server.getExternalHostname(),
-				hosts: server.getExternalHostname(),
-				diskList:[],
-				domainName: server.getExternalDomain(),
-				securityGroups: config.securityGroups,
-				serverInterfaces:server.interfaces,
-				publicIpType: config.publicIpType ?: 'subnet',
-				fqdn: server.getExternalHostname() + '.' + server.getExternalDomain(),
-		]
-
-		log.debug("Setting snapshot image refs opts.snapshotImageRef: ${opts.snapshotImageRef},  ${opts.rootSnapshotId}")
-		if(opts.snapshotImageRef) {
-			// restore from a snapshot
-			runConfig.imageRef = opts.snapshotImageRef
-			runConfig.osDiskSnapshot = opts.rootSnapshotId
-		} else {
-			// use selected provision image
-			runConfig.imageRef = runConfig.virtualImageLocation.externalId
-			runConfig.osDiskSnapshot = runConfig.virtualImageLocation.externalDiskId
-		}
-
-		return runConfig
-	}
+//	protected buildRunConfig(ComputeServer server, VirtualImage virtualImage, NetworkConfiguration networkConfiguration, config, Map opts) {
+//		log.debug("buildRunConfig: {}, {}, {}, {}, {}", server, virtualImage, networkConfiguration, config, opts)
+//		def rootVolume = server.volumes?.find{it.rootVolume == true}
+//		def dataDisks = server?.volumes?.findAll{it.rootVolume == false}?.sort{it.id}
+//		def maxStorage
+//		if(rootVolume) {
+//			maxStorage = rootVolume.maxStorage
+//		} else {
+//			maxStorage = config.maxStorage ?: server.plan.maxStorage
+//		}
+//
+//		def runConfig = [
+//				serverId: server.id,
+//				name: server.name,
+//				vpcRef: server.resourcePool?.externalId,
+//				zoneRef: server.cloud,
+//				server: server,
+//				imageType: virtualImage.imageType,
+//				osType: (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform,
+//				platform: (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform,
+//				kmsKeyId: config.kmsKeyId,
+//				osDiskSize : maxStorage.div(ComputeUtility.ONE_GIGABYTE),
+//				maxStorage : maxStorage,
+//				osDiskType: rootVolume?.type?.name ?: 'gp2',
+//				iops: rootVolume?.maxIOPS,
+//				osDiskName:'/dev/sda1',
+//				dataDisks: dataDisks,
+//				rootVolume:rootVolume,
+//				//cachePath: virtualImageService.getLocalCachePath(),
+//				virtualImage: virtualImage,
+//				hostname: server.getExternalHostname(),
+//				hosts: server.getExternalHostname(),
+//				diskList:[],
+//				domainName: server.getExternalDomain(),
+//				securityGroups: config.securityGroups,
+//				serverInterfaces:server.interfaces,
+//				publicIpType: config.publicIpType ?: 'subnet',
+//				fqdn: server.getExternalHostname() + '.' + server.getExternalDomain(),
+//		]
+//
+//		log.debug("Setting snapshot image refs opts.snapshotImageRef: ${opts.snapshotImageRef},  ${opts.rootSnapshotId}")
+//		if(opts.snapshotImageRef) {
+//			// restore from a snapshot
+//			runConfig.imageRef = opts.snapshotImageRef
+//			runConfig.osDiskSnapshot = opts.rootSnapshotId
+//		} else {
+//			// use selected provision image
+//			runConfig.imageRef = runConfig.virtualImageLocation.externalId
+//			runConfig.osDiskSnapshot = runConfig.virtualImageLocation.externalDiskId
+//		}
+//
+//		return runConfig
+//	}
 
 	private void runVirtualMachine(Map runConfig, ProvisionResponse provisionResponse, Map opts) {
+		log.info("in run virtual machine 921")
 		try {
 			// don't think this used
 			// runConfig.template = runConfig.imageId
@@ -786,7 +972,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		}
 	}
 
-	@Override
 	ServiceResponse<ProvisionResponse> runHost(ComputeServer server, HostRequest hostRequest, Map opts) {
 		log.debug("runHost: ${server} ${hostRequest} ${opts}")
 
@@ -849,6 +1034,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 						zone		: cloud,
 						dataDisks	: dataDisks,
 						externalId	: server.externalId,
+						zoneRef		: server.cloud,
 				]
 				//cloud init config
 				createOpts.hostname = server.getExternalHostname()
@@ -858,6 +1044,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				createOpts.networkConfig = hostRequest.networkConfiguration
 				createOpts.osType = (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform
 				createOpts.platform = createOpts.osType
+				//createOpts.userConfig = hostRequest.usersConfiguration
 
 				context.async.computeServer.save(server).blockingGet()
 				//create it
@@ -878,7 +1065,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		}
 	}
 
-	@Override
 	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
 		def server = morpheus.async.computeServer.get(workload.server.id).blockingGet()
 		if(server) {
@@ -888,7 +1074,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		}
 	}
 
-	@Override
 	ServiceResponse resizeServer(ComputeServer server, ResizeRequest resizeRequest, Map opts = [:]) {
 		return internalResizeServer(server, resizeRequest)
 	}

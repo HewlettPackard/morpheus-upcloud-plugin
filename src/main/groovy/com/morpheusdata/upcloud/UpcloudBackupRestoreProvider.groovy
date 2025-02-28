@@ -11,15 +11,16 @@ import com.morpheusdata.model.BackupResult;
 import com.morpheusdata.model.Backup;
 import com.morpheusdata.model.Instance
 import com.morpheusdata.upcloud.services.UpcloudApiService
+import com.morpheusdata.core.backup.util.BackupStatusUtility
 import groovy.util.logging.Slf4j
 
 @Slf4j
 class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 
-	Plugin plugin
+	UpcloudPlugin plugin
 	MorpheusContext morpheusContext
 
-	UpcloudBackupRestoreProvider(Plugin plugin, MorpheusContext morpheusContext) {
+	UpcloudBackupRestoreProvider(UpcloudPlugin plugin, MorpheusContext morpheusContext) {
 		this.plugin = plugin
 		this.morpheusContext = morpheusContext
 	}
@@ -120,16 +121,17 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 
 		try {
 			def config = backupResult.getConfigMap()
-			def snapshotList = config.snapshotList
+			def snapshotList = config.snapshots
+			log.info("snapshotList: ${snapshotList}")
 			if(snapshotList?.size() > 0) {
 				def workload = morpheus.async.workload.get(backupResult.containerId).blockingGet()
-				def instance = morpheus.async.instance.get(workload.instanceId).blockingGet()
-				def server = morpheus.async.server.get(workload.serverId).blockingGet()
-				def cloud = morpheus.async.cloud.get(serer.zoneId).blockingGet()
+				def instance = morpheus.async.instance.get(workload.instance.id).blockingGet()
+				def server = morpheus.async.computeServer.get(workload.serverId).blockingGet()
+				def cloud = morpheus.async.cloud.get(server.cloud.id).blockingGet()
 				//auth config
-				def authConfig = UpcloudApiService.getAuthConfig(cloud)
+				def authConfig = plugin.getAuthConfig(cloud)
 				//stop the server
-				def stopResults = UpcloudProvisionProvider.stopServer(server)
+				def stopResults = new UpcloudProvisionProvider(plugin, morpheus).stopServer(server)
 				//check this - wait for stopped
 				def statusResults = UpcloudApiService.waitForServerStatus(authConfig, server.externalId, 'stopped')
 				//restore
@@ -137,22 +139,26 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 				def restoreSuccess = true
 				snapshotList?.each { snapshot ->
 					def restoreResult = UpcloudApiService.restoreSnapshot(authConfig, snapshot.storageId)
+					log.info("restore result data: ${restoreResult.data}")
 					restoreSuccess = restoreResult.success && restoreSuccess
 					restoreResults << restoreResult
 				}
 				log.info("restore results: {}", restoreResults)
 				if(restoreSuccess == true) {
-					rtn.data.backupRestore.status = BackupStatus.IN_PROGRESS
+					rtn.data.backupRestore.status = BackupStatusUtility.IN_PROGRESS
 					rtn.data.backupRestore.externalId = server.externalId
 					rtn.data.backupRestore.startDate = new Date()
 					rtn.success = true
 					rtn.data.updates = true
 					//start the server
-					def startResults = UpcloudProvisionProvider.startServer(server)
+					def startResults = new UpcloudProvisionProvider(plugin, morpheus).startServer(server)
+					log.info("server started")
+					log.info("rtn.data.backupRestore: ${rtn.data.backupRestore}")
 				} else {
+					log.info("backup restore failed")
 					rtn.success = false
 					rtn.data.updates = true
-					rtn.data.backupRestore.status = BackupStatus.FAILED
+					rtn.data.backupRestore.status = BackupStatusUtility.FAILED
 				}
 			}
 		} catch(e) {
@@ -160,7 +166,7 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 			rtn.success = false
 			rtn.message = e.getMessage()
 			rtn.data.updates = true
-			rtn.data.backupRestore.status = BackupStatus.FAILED
+			rtn.data.backupRestore.status = BackupStatusUtility.FAILED
 			rtn.data.backupRestore.errorMessage = e.getMessage()
 		}
 		return rtn
@@ -190,7 +196,7 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 
 			if(server) {
 				//get status of server
-				def authConfig = UpcloudApiService.getAuthConfig(server.cloud)
+				def authConfig = plugin.getAuthConfig(server.cloud)
 				def serverDetail = UpcloudApiService.getServerDetail(authConfig, server.externalId)
 				if(serverDetail.success == true && serverDetail?.server?.state == 'started') {
 					//running again

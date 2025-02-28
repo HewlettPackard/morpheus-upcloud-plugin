@@ -208,13 +208,13 @@ class UpcloudCloudProvider implements CloudProvider {
 							editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:5, fieldClass:null),
 					new OptionType(code:"computeServerType.${this.getCode()}.lvmEnabled", inputType:OptionType.InputType.CHECKBOX, name:'lvmEnabled', category:"computeServerType.${this.getCode()}",
 							fieldName:'lvmEnabled', fieldCode: 'gomorpheus.optiontype.LvmEnabled?', fieldLabel:'LVM Enabled?', fieldContext:'server', fieldGroup:'Server Options', required:false, enabled:true, editable:false, global:false,
-							placeHolder:null, helpBlock:'', defaultValue:'on', custom:false, displayOrder:6, fieldClass:'lvm-enabled-checkbox', blockClass:'checkbox-container'),
+							placeHolder:null, helpBlock:'', defaultValue:'on', custom:false, displayOrder:6, fieldClass:'lvm-enabled-checkbox'),
 					new OptionType(code:"computeServerType.${this.getCode()}.dataDevice", inputType:OptionType.InputType.TEXT, name:'dataDevice', category:"computeServerType.${this.getCode()}",
 							fieldName:'dataDevice', fieldCode: 'gomorpheus.optiontype.DataVolume', fieldLabel:'Data Volume', fieldContext:'server', fieldGroup:'Server Options', required:true, enabled:true, editable:false, global:false,
 							placeHolder:null, helpBlock:'', defaultValue:'/dev/sdb', custom:false, displayOrder:7, fieldClass:null, wrapperClass:'lvm-server-options'),
 					new OptionType(code:"computeServerType.${this.getCode()}.softwareRaid", inputType:OptionType.InputType.CHECKBOX, name:'softwareRaid', category:"computeServerType.${this.getCode()}",
 							fieldName:'softwareRaid', fieldCode: 'gomorpheus.optiontype.SoftwareRaid', fieldLabel:'Software Raid', fieldContext:'server', fieldGroup:'Server Options', required:false, enabled:true, editable:false, global:false,
-							placeHolder:null, helpBlock:'', defaultValue:false, custom:false, displayOrder:8, fieldClass:null, wrapperClass:'lvm-server-options', blockClass:'checkbox-container'),
+							placeHolder:null, helpBlock:'', defaultValue:false, custom:false, displayOrder:8, fieldClass:null, wrapperClass:'lvm-server-options'),
 					new OptionType(code:"computeServerType.${this.getCode()}.network.name", inputType:OptionType.InputType.TEXT, name:'network name', category:"computeServerType.${this.getCode()}",
 							fieldName:'name', fieldCode: 'gomorpheus.optiontype.NetworkInterface', fieldLabel:'Network Interface', fieldContext:'network', fieldGroup:'Server Options', required:false, enabled:true, editable:false, global:false,
 							placeHolder:null, helpBlock:'', defaultValue:'eth0', custom:false, displayOrder:9, fieldClass:null)
@@ -511,7 +511,7 @@ class UpcloudCloudProvider implements CloudProvider {
 		log.debug("startServer: ${computeServer}")
 		def rtn = [success:false]
 		try {
-			return UpcloudProvisionProvider.startServer(computeServer)
+			return new UpcloudProvisionProvider(plugin, morpheus).startServer(computeServer)
 		} catch(e) {
 			rtn.msg = "Error starting server: ${e.message}"
 			log.error("startServer error: ${e}", e)
@@ -530,7 +530,7 @@ class UpcloudCloudProvider implements CloudProvider {
 		log.debug("stopServer: ${computeServer}")
 		def rtn = [success:false]
 		try {
-			return UpcloudProvisionProvider.stopServer(computeServer)
+			return new UpcloudProvisionProvider(plugin, morpheus).stopServer(computeServer)
 		} catch(e) {
 			rtn.msg = "Error stoping server: ${e.message}"
 			log.error("stopServer error: ${e}", e)
