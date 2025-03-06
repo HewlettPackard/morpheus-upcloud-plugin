@@ -1,0 +1,106 @@
+resource "option-type" "containerType-upcloud-template" {
+  code         = "containerType.upcloud.template"
+  type         = "select"
+  name         = "template"
+  category     = "containerType.upcloud"
+  fieldName    = "template"
+  optionSource = "upcloudImage"
+  optionSourceType = "upcloud"
+  fieldCode    = "gomorpheus.optiontype.Image"
+  fieldLabel   = "Image"
+  fieldContext = "config"
+  fieldGroup   = "Options"
+  required     = false
+  enabled      = true
+  editable     = false
+  global       = false
+  placeHolder  = null
+  helpBlock    = ""
+  defaultValue = null
+  custom       = false
+  displayOrder = 8
+  fieldClass   = null
+  visibleOnCode = null
+  description  = "Choose from a list of Virtual Images that might want to be provisioned."
+}
+
+resource "workload-type" "upcloud-1_0" {
+  code             = "upcloud-1.0"
+  shortName        = "upcloud"
+  name             = "UpCloud VM"
+  ports = []
+  containerVersion = "1.0"
+  repositoryImage  = ""
+  entryPoint       = ""
+  category         = "upcloud"
+  statTypeCode     = "vm"
+  logTypeCode      = "upcloud"
+  checkTypeCode    = "containerCheck"
+  serverType       = "vm"
+  mountPoint       = "/data"
+  provisionType    = "upcloud"
+  actions = ["generic-remove-node"]
+}
+
+resource "workload-type-set" "upcloud-1_0-set" {
+  code           = "upcloud-1.0-set"
+  workloadType   = workload-type.upcloud-1_0
+  priorityOrder  = 0
+  dynamicCount   = true
+  containerCount = 1
+}
+
+resource "instance-type" "upcloud" {
+  code                    = "upcloud"
+  name                    = "UpCloud"
+  category                = "cloud"
+  active                  = true
+  enabled                 = true
+  viewSet                 = "upcloud"
+  stackTier               = 30
+  hasConfig               = false
+  hasSettings             = false
+  hasDeployment           = false
+  deploymentService       = "defaultDeployService"
+  versions = ["1.0"]
+  hasAutoScale            = true
+  description             = "Spin up any VM Image on your upcloud based infrastructure."
+  provisionService        = "upCloudContainerService"
+  provisionTypeDefault    = true
+  environmentPrefix       = "UPCLOUD"
+  provisionSelectType     = "zone"
+  provisionType           = "upcloud"
+  pluginIconPath          = "upcloud-light.svg"
+  pluginIconDarkPath      = "upcloud-dark.svg"
+  pluginIconHidpiPath     = "upcloud-light0.svg"
+  pluginIconDarkHidpiPath = "upcloud-dark.svg"
+  optionTypes             = [
+    option-type.containerType-upcloud-template,
+    "instanceType.exposePorts"
+  ]
+}
+
+resource "instance-type-layout" "upcloud-1_0-single" {
+  code            = "upcloud-1.0-single"
+  name            = "UpCloud VM"
+  sortOrder       = 0
+  instanceVersion = "1.0"
+  description     = "This will provision a single process with no redundancy"
+  instanceType    = "upcloud"
+  serverCount     = 1
+  portCount       = 1
+  enabled         = true
+  creatable       = true
+  containers      = ["upcloud-1.0-set"]
+  actions         = ["generic-add-node"]
+  optionTypes     = []
+  provisionType   = "upcloud"
+}
+
+resource "scale-action" "upcloud-1_0-single" {
+  code       = "upcloud-1.0-single"
+  scaleType  = "action"
+  layout     = "upcloud-1.0-single"
+  upAction   = "generic-add-node"
+  downAction = "generic-remove-node"
+}

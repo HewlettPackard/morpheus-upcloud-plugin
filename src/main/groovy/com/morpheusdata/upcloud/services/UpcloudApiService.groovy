@@ -330,13 +330,15 @@ class UpcloudApiService {
                 }
             }
             //ssh key
-            if(serverConfig.userConfig?.keyList) {
-                serverConfig.userConfig.keyList.each {
-                    callOpts.body.server.login_user.ssh_keys.ssh_key << it
-                }
-            } else if(serverConfig.sshKey) {
-                callOpts.body.server.login_user.ssh_keys.ssh_key << serverConfig.sshKey
-            } else if(serverConfig.userConfig?.primaryKey?.publicKey) {
+//            if(serverConfig.userConfig?.keyList) {
+//                serverConfig.userConfig.keyList.each {
+//                    callOpts.body.server.login_user.ssh_keys.ssh_key << it
+//                }
+//            } else if(serverConfig.sshKey) {
+//                callOpts.body.server.login_user.ssh_keys.ssh_key << serverConfig.sshKey
+//            } else
+
+            if(serverConfig.userConfig?.primaryKey?.publicKey) {
                 callOpts.body.server.login_user.ssh_keys.ssh_key << serverConfig.userConfig.primaryKey.publicKey
             }
             //user data

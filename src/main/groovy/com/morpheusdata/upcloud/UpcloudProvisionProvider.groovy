@@ -106,9 +106,9 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			new OptionType(code:"provisionType.${this.getCode()}.noAgent", inputType:OptionType.InputType.CHECKBOX, name:'skip agent install', category:"provisionType.${this.getCode()}",
 					fieldName:'noAgent', fieldCode: 'gomorpheus.optiontype.SkipAgentInstall', fieldLabel:'Skip Agent Install', fieldContext:'config', fieldGroup:'Advanced Options', required:false, enabled:true,
 					editable:false, global:false, placeHolder:null, helpBlock:'Skipping Agent installation will result in a lack of logging and guest operating system statistics. Automation scripts may also be adversely affected.', defaultValue:null, custom:false, displayOrder:4, fieldClass:null),
-			new OptionType(code:'containerType.upcloud.imageId', inputType:OptionType.InputType.SELECT, name:'imageType', category:'containerType.upcloud', optionSource: 'upcloudImage', optionSourceType:'upcloud',
-					fieldName:'imageId', fieldCode: 'gomorpheus.optiontype.Image', fieldLabel:'Image', fieldContext:'config', required:true, enabled:true, editable:false, global:false,
-					placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:3, fieldClass:null)
+//			new OptionType(code:'containerType.upcloud.imageId', inputType:OptionType.InputType.SELECT, name:'imageType', category:'containerType.upcloud', optionSource: 'upcloudImage', optionSourceType:'upcloud',
+//					fieldName:'imageId', fieldCode: 'gomorpheus.optiontype.Image', fieldLabel:'Image', fieldContext:'config', required:true, enabled:true, editable:false, global:false,
+//					placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:3, fieldClass:null)
 		]
 		// TODO: create some option types for provisioning and add them to collection
 		return options
@@ -184,6 +184,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 	Boolean canCustomizeDataVolumes() {
 		return true
+	}
+
+	@Override
+	Boolean createDefaultInstanceType() {
+		return false
 	}
 
 	def buildDataDisk(volume) {
@@ -273,12 +278,20 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				def rootVolume = workload.server.volumes?.find{ it.rootVolume == true}
 				def dataDisks = workload.server.volumes?.findAll{ it.rootVolume == false}?.sort{it.id}
 				def servicePlan = workload.instance.plan
+				def maxMemory = server.maxMemory?.div(ComputeUtility.ONE_MEGABYTE)
+				def maxStorage = rootVolume?.getMaxStorage() ?: opts.config?.maxStorage ?: server.plan.maxStorage
+
 				def runConfig = [
 						containerId: workload.id,
 						instanceId: workload.instance.id,
 						account: account,
 						zone: cloud,
 						name: cleanInstanceName(server.name),
+						maxStorage: maxStorage,
+						maxMemory: maxMemory,
+						applianceServerUrl: workloadRequest.cloudConfigOpts?.applianceUrl,
+						workloadConfig: workload.getConfigMap(),
+						timezone: (server.getConfigProperty('timezone') ?: cloud.timezone),
 						zoneRef: cloudConfig.zone,
 						hostname: server.getExternalHostname(),
 						userData: null,
@@ -296,7 +309,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 						serverInterfaces: server.interfaces,
 						osType: (virtualImage.osType?.platform?.toString() == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform,
 						platform: (virtualImage.osType?.platform?.toString() == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform,
-						//userConfig: workloadRequest.usersConfiguration
+						proxySettings: workloadRequest.proxyConfiguration,
+						userConfig: workloadRequest.usersConfiguration,
+						cloudConfig: workloadRequest.cloudConfigUser,
+						networkConfig: workloadRequest.networkConfiguration
 				]
 
 				if(servicePlan.internalId == 'custom') {
@@ -631,9 +647,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	protected insertVm(Map runConfig, ProvisionResponse provisionResponse, Map opts) {
 		log.debug("insertVm runConfig: {}", runConfig)
 		def taskResults = [success:false]
-		ComputeServer server = runConfig.server
-		Account account = server.account
-		//opts.createUserList = runConfig.userConfig.createUsers
+		def server = runConfig.server
+		def instance = morpheus.async.instance.get(runConfig.instanceId).blockingGet()
+
+		opts.createUserList = runConfig.userConfig.createUsers
 
 		//save server
 		// runConfig.server = saveAndGet(server)
@@ -1044,7 +1061,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				createOpts.networkConfig = hostRequest.networkConfiguration
 				createOpts.osType = (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform
 				createOpts.platform = createOpts.osType
-				//createOpts.userConfig = hostRequest.usersConfiguration
+				createOpts.userConfig = hostRequest.usersConfiguration
 
 				context.async.computeServer.save(server).blockingGet()
 				//create it
