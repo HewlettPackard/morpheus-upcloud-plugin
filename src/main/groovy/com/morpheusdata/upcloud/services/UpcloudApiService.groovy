@@ -343,8 +343,8 @@ class UpcloudApiService {
             }
             //user data
             callOpts.body.server.metadata = 'yes'
-            if(serverConfig.userData)
-                callOpts.body.server.user_data = serverConfig.userData
+            if(serverConfig.cloudConfig)
+                callOpts.body.server.user_data = serverConfig.cloudConfig
             //create server
             log.debug("callOpts: ${callOpts}")
             def callResults = callApi(authConfig, callPath, callOpts, 'POST')
