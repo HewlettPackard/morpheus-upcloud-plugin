@@ -1,9 +1,9 @@
-resource "option-type" "containerType-upcloud-template" {
-  code         = "containerType.upcloud.template"
+resource "option-type" "containerType-upcloud-image" {
+  code         = "containerType.upcloud.imageId"
   type         = "select"
-  name         = "template"
+  name         = "imageType"
   category     = "containerType.upcloud"
-  fieldName    = "template"
+  fieldName    = "imageId"
   optionSource = "upcloudImage"
   optionSourceType = "upcloud"
   fieldCode    = "gomorpheus.optiontype.Image"
@@ -18,7 +18,7 @@ resource "option-type" "containerType-upcloud-template" {
   helpBlock    = ""
   defaultValue = null
   custom       = false
-  displayOrder = 8
+  displayOrder = 3
   fieldClass   = null
   visibleOnCode = null
   description  = "Choose from a list of Virtual Images that might want to be provisioned."
@@ -39,6 +39,10 @@ resource "workload-type" "upcloud-1_0" {
   serverType       = "vm"
   mountPoint       = "/data"
   provisionType    = "upcloud"
+  commEnabled      = true
+  commType         = 'SSH'
+  commPort         = 22
+  backupType       = 'upCloudSnapshot'
   actions = ["generic-remove-node"]
 }
 
@@ -70,6 +74,7 @@ resource "instance-type" "upcloud" {
   environmentPrefix       = "UPCLOUD"
   provisionSelectType     = "zone"
   provisionType           = "upcloud"
+  backupType              = 'upCloudSnapshot'
   pluginIconPath          = "upcloud-light.svg"
   pluginIconDarkPath      = "upcloud-dark.svg"
   pluginIconHidpiPath     = "upcloud-light0.svg"
