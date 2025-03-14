@@ -258,15 +258,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 		try {
 			def containerConfig = workload.getConfigMap()
-			log.info("containerConfig: ${containerConfig}")
 			def server = workload.server
-			log.info("server: ${server}")
 			def cloud = server.cloud
-			log.info("cloud: ${cloud}")
 			def account = server.account
-			log.info("account: ${account}")
 			def cloudConfig = cloud.getConfigMap()
-			log.info("cloudConfig: ${cloudConfig}")
 
 			def authConfig = plugin.getAuthConfig(cloud)
 			opts.noAgent = containerConfig.noAgent
@@ -312,8 +307,20 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 						proxySettings: workloadRequest.proxyConfiguration,
 						userConfig: workloadRequest.usersConfiguration,
 						cloudConfig: workloadRequest.cloudConfigUser,
-						networkConfig: workloadRequest.networkConfiguration
+						networkConfig: workloadRequest.networkConfiguration,
+						noAgent: (opts.config?.containsKey("noAgent") == true && opts.config.noAgent == true),
+						installAgent: (opts.config?.containsKey("noAgent") == false || (opts.config?.containsKey("noAgent") && opts.config.noAgent != true))
 				]
+
+				log.info("workload request cloud init users: ${workloadRequest.usersConfiguration.cloudInitUsers}")
+				log.info("workload request create users: ${workloadRequest.usersConfiguration.createUsers}")
+				log.info("workload request create users keys: ${workloadRequest.usersConfiguration.createUsers.keys}")
+
+				log.info("IN RUN WORKLOAD 319")
+				log.info("opts.config: ${opts.config}")
+				log.info("opts.config.noAgent: ${opts.config.noAgent}")
+				log.info("runConfig.noAgent: ${runConfig.noAgent}")
+				log.info("runConfig.installAgent: ${runConfig.installAgent}")
 
 				if(servicePlan.internalId == 'custom') {
 					runConfig.maxMemory = workload.maxMemory ?: servicePlan.maxMemory
@@ -326,21 +333,28 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 				log.info("runConfig: ${runConfig}")
 
+				log.info("opts.backupSetId: ${opts.backupSetId}")
+				log.info("opts.cloneContainerId: ${opts.cloneContainerId}")
 				if(opts.cloneContainerId && opts.backupSetId) {
-					def snapshot = morpheus.services.backup.backupResult.list(
+					def snapshot = morpheus.services.backup.backupResult.find(
 							new DataQuery().withFilter("backupSetId", opts.backupSetId)
-							.withFilter("containerId", opts.cloneContainerId)
-					).find{ it.backupSetId == opts.backupSetId }
-					def rootSnapshot = snapshot?.snapshotList?.find{ it.root }
+							.withFilter("containerId", opts.cloneContainerId))
+					log.info("snapshot 342: ${snapshot.dump()}")
+					def snapshots = snapshot.getConfigProperty("snapshots")
+					log.info("snapshot get config property: ${snapshots}")
+					def rootSnapshot = snapshots?.find{ it.root == true }
+					log.info("root snapshot: ${rootSnapshot.dump()}")
 					if(rootSnapshot && rootSnapshot.storageId) {
 						log.info("creating server from snapshot image: ${rootSnapshot.storageId}")
 						runConfig.cloneImageId = rootSnapshot.storageId
 					}
 					// Handle any data disks
-					def dataSnapshots = snapshot?.snapshotList?.findAll { !it.root }
+					def dataSnapshots = snapshots?.findAll { !it.root }
+					log.info("data snapshots 353: ${dataSnapshots}")
 					dataSnapshots?.each { dataSnapshot ->
-						def dataDisk = runConfig.dataDisks?.find { !it.snapshotUUID && (int)it.maxStorage.div(ComputeUtility.ONE_GIGABYTE) == (int)dataSnapshot.sizeInGb }
-						dataDisk.snapshotUUID = dataSnapshot.storageId
+						def dataDisk = runConfig.dataDisks?.find { !it.getConfigProperty("snapshotUUID") && (int)it.maxStorage.div(ComputeUtility.ONE_GIGABYTE) == (int)dataSnapshot.sizeInGb }
+						dataDisk.setConfigProperty("snapshotUUID",dataSnapshot.storageId)
+						log.info("dataDisk 357: ${dataDisk.dump()}")
 					}
 				}
 				// upload or insert image
@@ -351,12 +365,15 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					try {
 						log.info("imageUploadTask onComplete: ${imageUploadResults}")
 						if (imageUploadResults.success == true && imageUploadResults.imageId) {
-							log.info("imageUploadResults.virtualImage.id: ${imageUploadResults?.virtualImage}, ${imageUploadResults?.virtualImage?.id}")
-							log.info("runConfig.virtualImage.id: ${runConfig.virtualImage.id}")
 							runConfig.virtualImage = morpheus.async.virtualImage.get(imageUploadResults?.virtualImage?.id ?: runConfig.virtualImage.id).blockingGet()
-							log.info("runConfig.virtualImage: ${runConfig.virtualImage}")
 							runConfig.imageRef = runConfig.virtualImage.externalId
 							opts.installAgent = opts.noAgent ? false : runConfig.virtualImage.installAgent
+							provisionResponse.noAgent = runConfig.noAgent
+							provisionResponse.installAgent = runConfig.installAgent
+
+							log.info("IN RUN WORKLOAD, IMAGE UPLOAD RESULTS SUCCESS 367")
+							log.info("provisionResponse.noAgent: ${provisionResponse.noAgent}")
+							log.info("provisionResponse.installAgent: ${provisionResponse.installAgent}")
 
 							runVirtualMachine(runConfig, provisionResponse, opts)
 							log.info("after run virtual machine")
@@ -382,6 +399,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			if(provisionResponse.success != true) {
 				return new ServiceResponse(success: false, msg: provisionResponse.message ?: 'vm config error', error: provisionResponse.message, data: provisionResponse)
 			} else {
+//				provisionResponse.noAgent = true
+//				provisionResponse.installAgent = false
+				log.info("IN RUN WORKLOAD, RETURNING SUCCESS 397")
+				log.info("provisionResponse.noAgent: ${provisionResponse.noAgent}")
+				log.info("provisionResponse.installAgent: ${provisionResponse.installAgent}")
 				return new ServiceResponse<ProvisionResponse>(success: true, data: provisionResponse)
 			}
 		} catch (e) {
@@ -481,15 +503,14 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse removeWorkload(Workload workload, Map opts) {
-		log.debug "removeWorkload: ${workload} ${opts}"
+		log.info "removeWorkload: ${workload} ${opts}"
 		ComputeServer server = workload.server
 		Cloud cloud = server.cloud
 		if(workload.server?.externalId) {
 			def authConfig = plugin.getAuthConfig(cloud)
-			def notStatus = UpcloudApiService.waitForServerNotStatus(authConfig, server.externalId, 'maintenance')
 			stopWorkload(workload)
 			def statusResult = UpcloudApiService.waitForServerStatus(authConfig, server.externalId, 'stopped')
-			if(statusResult.sucess == true) {
+			if(statusResult.success == true) {
 				def removeResults = UpcloudApiService.removeServer(authConfig, server.externalId)
 				if (removeResults.success == true) {
 					return ServiceResponse.success()
@@ -573,9 +594,9 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			def startResults = UpcloudApiService.startServer(authConfig, computeServer.externalId)
 			log.info("start results: ${startResults}")
 			if(startResults.success == true) {
-				def waitResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'running')
+				def waitResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'started')
 				log.info("wait results: ${waitResults}")
-				if(waitResults.success) {
+				if(waitResults.success == true) {
 					return ServiceResponse.success()
 				} else {
 					return ServiceResponse.error('Failed to start vm')
@@ -658,6 +679,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 		//set install agent
 		runConfig.installAgent = runConfig.noAgent && server.cloud.agentMode != 'cloudInit'
+
 		log.info("RUNCONFIG ROOT VOLUME DISK TYPE: ${runConfig.rootVolume.diskType}")
 		def createResults = UpcloudApiService.createServer(runConfig.authConfig, runConfig)
 		log.info("create server results success ${createResults.success}")
@@ -1004,7 +1026,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			def imageId
 			def virtualImage
 			def layout = server?.layout
-			def typeSet = server.typeSet
+			def typeSet = server?.typeSet
 
 			if(layout && typeSet && (typeSet.workloadType.virtualImage || typeSet.workloadType.osType)) {
 				Long computeTypeSetId = server.typeSet?.id
@@ -1031,27 +1053,34 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 			if(imageId) {
 				server.sourceImage = virtualImage
-				def maxMemory = server.maxMemory ?: server.plan.maxMemory
-				def maxCores = server.maxCores ?: server.plan.maxCores
 				def rootVolume = server.volumes?.find { it.rootVolume == true }
 				def maxStorage = rootVolume.maxStorage
 				def dataDisks = server?.volumes?.findAll{it.rootVolume == false}?.sort{it.id}
 				server.osDevice = '/dev/vda'
 				server.dataDevice = dataDisks?.size() > 0 ? '/dev/vdb' : '/dev/vda'
 				opts.server.lvmEnabled = dataDisks?.size() > 0
+				opts.createUserList = opts.userConfig.createUsers
+				opts.server.sshUsername = opts.userConfig.sshUsername
+				opts.server.sshPassword = opts.userConfig.sshPassword
+				opts.sshKey  = opts.userConfig.primaryKey
 				def createOpts = [
 						account		: account,
 						name		: server.name,
-						maxMemory	: maxMemory,
-						maxCores	: maxCores,
 						maxStorage	: maxStorage,
-						maxCpu		: maxCores,
 						imageId		: imageId,
 						server		: server,
 						zone		: cloud,
 						dataDisks	: dataDisks,
 						externalId	: server.externalId,
 						zoneRef		: server.cloud,
+						noAgent		: (opts.config?.containsKey("noAgent") == true && opts.config.noAgent == true),
+						installAgent: (opts.config?.containsKey("noAgent") == false || (opts.config?.containsKey("noAgent") && opts.config.noAgent != true)),
+						username	: opts.server.sshUsername,
+						password	: opts.userConfig.sshPassword,
+						imageRef	: imageId,
+						sshKey		: opts.sshKey,
+						userData	: null,
+						rootVolume  : rootVolume
 				]
 				//cloud init config
 				createOpts.hostname = server.getExternalHostname()
@@ -1062,6 +1091,28 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				createOpts.osType = (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform
 				createOpts.platform = createOpts.osType
 				createOpts.userConfig = hostRequest.usersConfiguration
+
+				if(plan.internalId == 'custom') {
+					createOpts.maxMemory = server.maxMemory ?: plan.maxMemory
+					createOpts.maxCores = server.maxCores ?: plan.maxCores
+					createOpts.maxCpu = server.maxCores ?: plan.maxCores
+				} else {
+					createOpts.planRef = plan.externalId
+				}
+
+				if(virtualImage?.isCloudInit) {
+					def cloudConfigOpts = hostRequest?.cloudConfigOpts ?: null
+					opts.installAgent = (cloudConfigOpts.installAgent != true)
+
+					def cloudConfigUser = hostRequest?.cloudConfigUser ?: null
+					createOpts.userData = cloudConfigUser
+				}
+
+				log.info("IN RUN HOST")
+				log.info("opts.config: ${opts.config}")
+				log.info("opts.config.noAgent: ${opts.config.noAgent}")
+				log.info("runConfig.noAgent: ${createOpts.noAgent}")
+				log.info("runConfig.installAgent: ${createOpts.installAgent}")
 
 				context.async.computeServer.save(server).blockingGet()
 				//create it

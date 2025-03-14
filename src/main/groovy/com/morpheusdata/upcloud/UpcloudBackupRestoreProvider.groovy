@@ -58,7 +58,7 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 	 */
 	@Override
 	ServiceResponse getBackupRestoreInstanceConfig(BackupResult backupResult, Instance instanceModel, Map restoreConfig, Map opts) {
-		return ServiceResponse.success()
+		return ServiceResponse.success(restoreConfig)
 	}
 
 	/**
@@ -139,13 +139,12 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 				def restoreSuccess = true
 				snapshotList?.each { snapshot ->
 					def restoreResult = UpcloudApiService.restoreSnapshot(authConfig, snapshot.storageId)
-					log.info("restore result data: ${restoreResult.data}")
 					restoreSuccess = restoreResult.success && restoreSuccess
 					restoreResults << restoreResult
 				}
 				log.info("restore results: {}", restoreResults)
 				if(restoreSuccess == true) {
-					rtn.data.backupRestore.status = BackupStatusUtility.IN_PROGRESS
+					rtn.data.backupRestore.status = BackupResult.Status.SUCCEEDED
 					rtn.data.backupRestore.externalId = server.externalId
 					rtn.data.backupRestore.startDate = new Date()
 					rtn.success = true
@@ -158,7 +157,7 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 					log.info("backup restore failed")
 					rtn.success = false
 					rtn.data.updates = true
-					rtn.data.backupRestore.status = BackupStatusUtility.FAILED
+					rtn.data.backupRestore.status = BackupResult.Status.FAILED
 				}
 			}
 		} catch(e) {
@@ -166,7 +165,7 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 			rtn.success = false
 			rtn.message = e.getMessage()
 			rtn.data.updates = true
-			rtn.data.backupRestore.status = BackupStatusUtility.FAILED
+			rtn.data.backupRestore.status = BackupResult.Status.FAILED
 			rtn.data.backupRestore.errorMessage = e.getMessage()
 		}
 		return rtn

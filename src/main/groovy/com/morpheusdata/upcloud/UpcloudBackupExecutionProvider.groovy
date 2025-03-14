@@ -219,7 +219,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 				}
 
 				rtn.success = true
-				rtn.data.backupResult.status = BackupStatusUtility.IN_PROGRESS
+				rtn.data.backupResult.status = BackupResult.Status.IN_PROGRESS
 				//rtn.data.backupResult.backupResultId = rtn.backupResultId
 				rtn.data.backupResult.sizeInMb = totalSize * 1024l
 				//rtn.data.backupResult.providerType = 'upcloud'
@@ -234,7 +234,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 				def errorMessage = errorSnapshots?.collect{ it.snapshotResult.msg }?.join('\n') ?: 'unknown error creating snapshots'
 				rtn.data.backupResult.sizeInMb = 0
 				rtn.data.backupResult.errorOutput = errorMessage
-				rtn.data.backupResult.status = BackupStatusUtility.FAILED
+				rtn.data.backupResult.status = BackupResult.Status.FAILED
 				rtn.data.updates = true
 			}
 			if(snapshotSuccess == true && opts.inline) {
@@ -249,7 +249,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 			rtn.msg = e.getMessage()
 			rtn.data.backupResult.errorOutput = "Failed to execute backup".encodeAsBase64()
 			rtn.data.backupResult.sizeInMb = 0
-			rtn.data.backupResult.status = BackupStatusUtility.FAILED
+			rtn.data.backupResult.status = BackupResult.Status.FAILED
 			rtn.data.updates = true
 		}
 		return rtn

@@ -1,5 +1,6 @@
 package com.morpheusdata.upcloud.services
 
+import com.morpheusdata.model.StorageVolume
 import com.morpheusdata.response.ServiceResponse
 import com.morpheusdata.upcloud.*
 import com.morpheusdata.core.util.*
@@ -267,6 +268,7 @@ class UpcloudApiService {
 
     static createServer(Map authConfig, Map serverConfig) {
         log.debug("serverConfig: ${serverConfig}")
+        log.info("account: ${serverConfig.account.id}")
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -312,8 +314,9 @@ class UpcloudApiService {
             }
             //data disks?
             if(serverConfig.dataDisks) {
-                serverConfig.dataDisks?.eachWithIndex { dataDisk, index ->
-                    println("dataDisk: ${dataDisk}")
+                serverConfig.dataDisks?.eachWithIndex { StorageVolume dataDisk, index ->
+                    log.info("dataDisk: ${dataDisk}")
+                    log.info("dataDisk: ${dataDisk.dump()}")
                     def diskSize = (int)dataDisk.maxStorage.div(ComputeUtility.ONE_GIGABYTE)
                     def diskData = [action: 'create',
                                     size:diskSize,
@@ -321,24 +324,28 @@ class UpcloudApiService {
                                     title:serverConfig.name + ' ' + (dataDisk.name ?: 'disk ' + (index + 1))
                     ]
 
-                    if(dataDisk.snapshotUUID) {
+                    if(dataDisk.getConfigProperty("snapshotUUID")) {
                         diskData.action = 'clone'
-                        diskData.storage = dataDisk.snapshotUUID
+                        diskData.storage = dataDisk.getConfigProperty("snapshotUUID")
                     }
 
                     callOpts.body.server.storage_devices.storage_device << diskData
                 }
             }
             //ssh key
-//            if(serverConfig.userConfig?.keyList) {
-//                serverConfig.userConfig.keyList.each {
-//                    callOpts.body.server.login_user.ssh_keys.ssh_key << it
-//                }
-//            } else if(serverConfig.sshKey) {
-//                callOpts.body.server.login_user.ssh_keys.ssh_key << serverConfig.sshKey
-//            } else
-
-            if(serverConfig.userConfig?.primaryKey?.publicKey) {
+            if(serverConfig.userConfig?.cloudInitUsers) {
+                serverConfig.userConfig.cloudInitUsers.each { user ->
+                    user.keys.each { key ->
+                        callOpts.body.server.login_user.ssh_keys.ssh_key << key
+                    }
+                }
+            } else if(serverConfig.userConfig?.createUsers) {
+                serverConfig.userConfig.createUsers.each { user ->
+                    user.keys.each { key ->
+                        callOpts.body.server.login_user.ssh_keys.ssh_key << key
+                    }
+                }
+            } else if(serverConfig.userConfig?.primaryKey?.publicKey) {
                 callOpts.body.server.login_user.ssh_keys.ssh_key << serverConfig.userConfig.primaryKey.publicKey
             }
             //user data
@@ -637,8 +644,7 @@ class UpcloudApiService {
             def callPath = "/server/${serverId}/start"
             def callResults = callApi(authConfig, callPath, callOpts, 'POST')
             log.info("call results: ${callResults}")
-            def serverDetail = getServerDetail(authConfig, serverId)
-            if(callResults.success == true || (callResults.success == false && callResults.errors.error.endsWith("Read timed out") && serverDetail.success && serverDetail?.server?.state == 'started')) {
+            if(callResults.success == true || (callResults.success == false && callResults.errors.error.endsWith("Read timed out"))) {
                 log.info("read timed out error caught")
                 rtn.data = callResults.data
                 rtn.success = true

@@ -40,9 +40,9 @@ resource "workload-type" "upcloud-1_0" {
   mountPoint       = "/data"
   provisionType    = "upcloud"
   commEnabled      = true
-  commType         = 'SSH'
+  commType         = "SSH"
   commPort         = 22
-  backupType       = 'upCloudSnapshot'
+  backupType       = "upCloudSnapshot"
   actions = ["generic-remove-node"]
 }
 
@@ -74,7 +74,7 @@ resource "instance-type" "upcloud" {
   environmentPrefix       = "UPCLOUD"
   provisionSelectType     = "zone"
   provisionType           = "upcloud"
-  backupType              = 'upCloudSnapshot'
+  backupType              = "upCloudSnapshot"
   pluginIconPath          = "upcloud-light.svg"
   pluginIconDarkPath      = "upcloud-dark.svg"
   pluginIconHidpiPath     = "upcloud-light0.svg"
