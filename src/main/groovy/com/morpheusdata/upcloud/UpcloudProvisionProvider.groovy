@@ -16,6 +16,7 @@ import com.morpheusdata.model.ComputeServer
 import com.morpheusdata.model.ComputeServerInterface
 import com.morpheusdata.model.ComputeServerInterfaceType
 import com.morpheusdata.model.ComputeTypeSet
+import com.morpheusdata.model.HostType
 import com.morpheusdata.model.Icon
 import com.morpheusdata.model.Instance
 import com.morpheusdata.model.NetAddress
@@ -35,6 +36,7 @@ import com.morpheusdata.request.ResizeRequest
 import com.morpheusdata.response.PrepareWorkloadResponse
 import com.morpheusdata.response.ProvisionResponse
 import com.morpheusdata.response.ServiceResponse
+import com.morpheusdata.upcloud.datasets.UpcloudImageDatasetProvider
 import com.morpheusdata.upcloud.services.UpcloudApiService
 import groovy.util.logging.Slf4j
 import org.apache.tools.ant.types.spi.Service
@@ -121,8 +123,60 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	Collection<OptionType> getNodeOptionTypes() {
-		Collection<OptionType> nodeOptions = []
-		return nodeOptions
+		OptionType osTypeOption = new OptionType([
+				name : 'osType',
+				code : 'upcloud-node-os-type',
+				fieldName : 'osType.id',
+				fieldContext : 'domain',
+				fieldLabel : 'OsType',
+				inputType : OptionType.InputType.SELECT,
+				displayOrder : 100,
+				required : false,
+				optionSource : 'osTypes'
+		])
+		OptionType imageOption = new OptionType([
+				name : 'image',
+				code : 'upcloud-node-image',
+				fieldName : 'virtualImage.id',
+				fieldContext : 'domain',
+				fieldLabel : 'Image',
+				inputType : OptionType.InputType.SELECT,
+				displayOrder : 99,
+				required : false,
+				optionSource : 'upcloud.upcloudImageDataset'
+		])
+		OptionType logFolder = new OptionType([
+				name : 'mountLogs',
+				code : 'upcloud-node-log-folder',
+				fieldName : 'mountLogs',
+				fieldContext : 'domain',
+				fieldLabel : 'Log Folder',
+				inputType : OptionType.InputType.TEXT,
+				displayOrder : 101,
+				required : false,
+		])
+		OptionType configFolder = new OptionType([
+				name : 'mountConfig',
+				code : 'upcloud-node-config-folder',
+				fieldName : 'mountConfig',
+				fieldContext : 'domain',
+				fieldLabel : 'Config Folder',
+				inputType : OptionType.InputType.TEXT,
+				displayOrder : 102,
+				required : false,
+		])
+		OptionType deployFolder = new OptionType([
+				name : 'mountData',
+				code : 'upcloud-node-deploy-folder',
+				fieldName : 'mountData',
+				fieldContext : 'domain',
+				fieldLabel : 'Deploy Folder',
+				inputType : OptionType.InputType.TEXT,
+				displayOrder : 103,
+				helpText: '(Optional) If using deployment services, this mount point will be replaced with the contents of said deployments.',
+				required : false,
+		])
+		return [osTypeOption, imageOption, logFolder, configFolder, deployFolder]
 	}
 
 	/**
@@ -189,6 +243,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	@Override
 	Boolean createDefaultInstanceType() {
 		return false
+	}
+
+	@Override
+	HostType getHostType() {
+		return HostType.vm
 	}
 
 	def buildDataDisk(volume) {

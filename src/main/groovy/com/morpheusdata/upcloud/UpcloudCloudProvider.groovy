@@ -11,8 +11,10 @@ import com.morpheusdata.model.BackupProvider
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.CloudFolder
 import com.morpheusdata.model.CloudPool
+import com.morpheusdata.model.ComputeCapacityInfo
 import com.morpheusdata.model.ComputeServer
 import com.morpheusdata.model.ComputeServerType
+import com.morpheusdata.core.util.ComputeUtility
 import com.morpheusdata.model.Datastore
 import com.morpheusdata.model.Icon
 import com.morpheusdata.model.Network
@@ -159,6 +161,11 @@ class UpcloudCloudProvider implements CloudProvider {
 	@Override
 	Collection<StorageVolumeType> getStorageVolumeTypes() {
 		Collection<StorageVolumeType> volumeTypes = []
+		volumeTypes << new StorageVolumeType([code:'upcloudVolume', displayName:'UpCloud MaxIOPS', name:'MaxIOPS', description:'UpCloud MaxIOPS', volumeType:'disk', enabled:true,
+											  displayOrder:1, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk']) // MaxIPOs
+
+		volumeTypes << new StorageVolumeType([code:'upcloudHddVolume', displayName:'UpCloud Disk', name:'HDD', description:'UpCloud HDD', volumeType:'disk', enabled:false,
+											  displayOrder:2, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk']) // HDD
 		return volumeTypes
 	}
 
@@ -179,53 +186,34 @@ class UpcloudCloudProvider implements CloudProvider {
 	@Override
 	Collection<ComputeServerType> getComputeServerTypes() {
 		Collection<ComputeServerType> serverTypes = [
-			new ComputeServerType(
-				code:'selfManagedLinux', name:'Manual Docker Host', description:'', platform:'linux', nodeType:'morpheus-node',
-				enabled:true, selectable:false, externalDelete:false, managed:true, controlPower:false, controlSuspend:false, creatable:true, computeService:'standardComputeService',
-				displayOrder:16, hasAutomation:true,
-				containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.host, containerEngine:'docker',
-				provisionTypeCode: 'manual',
-				computeTypeCode:'docker-host',
-				optionTypes:[
-					new OptionType(code:"computeServerType.${this.getCode()}.sshHost", inputType:OptionType.InputType.TEXT, name:'sshHost', category:"computeServerType.${this.getCode()}",
-								fieldName:'sshHost', fieldCode: 'gomorpheus.optiontype.Host', fieldLabel:'Host', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
-								required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
-								displayOrder:1, fieldClass:null, fieldSize:15),
-					new OptionType(code:"computeServerType.${this.getCode()}.sshPort", inputType:OptionType.InputType.NUMBER, name:'sshPort', category:"computeServerType.${this.getCode()}",
-							fieldName:'sshPort', fieldCode: 'gomorpheus.optiontype.Port', fieldLabel:'Port', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
-							required:false, enabled:true, editable:false, global:false, placeHolder:'22', helpBlock:'', defaultValue:'22', custom:false,
-							displayOrder:2, fieldClass:null, fieldSize:5),
-					new OptionType(code:"computeServerType.${this.getCode()}.sshUsername", inputType:OptionType.InputType.TEXT, name:'sshUsername', category:"computeServerType.${this.getCode()}",
-							fieldName:'sshUsername', fieldCode: 'gomorpheus.optiontype.User', fieldLabel:'User', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
-							required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
-							displayOrder:3, fieldClass:null),
-					new OptionType(code:"computeServerType.${this.getCode()}.sshPassword", inputType:OptionType.InputType.PASSWORD, name:'sshPassword', category:"computeServerType.${this.getCode()}",
-							fieldName:'sshPassword', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
-							required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
-							displayOrder:4, fieldClass:null),
-					new OptionType(code:"computeServerType.${this.getCode()}.provisionKey", inputType:OptionType.InputType.SELECT, name:'provisionKey', category:"computeServerType.${this.getCode()}",
-							fieldName:'provisionKey', fieldCode: 'gomorpheus.optiontype.SshKey', fieldLabel:'SSH Key', fieldContext:'config', fieldGroup:'Options', required:false, enabled:true, optionSource: 'privateKeys',
-							editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:5, fieldClass:null),
-					new OptionType(code:"computeServerType.${this.getCode()}.lvmEnabled", inputType:OptionType.InputType.CHECKBOX, name:'lvmEnabled', category:"computeServerType.${this.getCode()}",
-							fieldName:'lvmEnabled', fieldCode: 'gomorpheus.optiontype.LvmEnabled?', fieldLabel:'LVM Enabled?', fieldContext:'server', fieldGroup:'Server Options', required:false, enabled:true, editable:false, global:false,
-							placeHolder:null, helpBlock:'', defaultValue:'on', custom:false, displayOrder:6, fieldClass:'lvm-enabled-checkbox'),
-					new OptionType(code:"computeServerType.${this.getCode()}.dataDevice", inputType:OptionType.InputType.TEXT, name:'dataDevice', category:"computeServerType.${this.getCode()}",
-							fieldName:'dataDevice', fieldCode: 'gomorpheus.optiontype.DataVolume', fieldLabel:'Data Volume', fieldContext:'server', fieldGroup:'Server Options', required:true, enabled:true, editable:false, global:false,
-							placeHolder:null, helpBlock:'', defaultValue:'/dev/sdb', custom:false, displayOrder:7, fieldClass:null, wrapperClass:'lvm-server-options'),
-					new OptionType(code:"computeServerType.${this.getCode()}.softwareRaid", inputType:OptionType.InputType.CHECKBOX, name:'softwareRaid', category:"computeServerType.${this.getCode()}",
-							fieldName:'softwareRaid', fieldCode: 'gomorpheus.optiontype.SoftwareRaid', fieldLabel:'Software Raid', fieldContext:'server', fieldGroup:'Server Options', required:false, enabled:true, editable:false, global:false,
-							placeHolder:null, helpBlock:'', defaultValue:false, custom:false, displayOrder:8, fieldClass:null, wrapperClass:'lvm-server-options'),
-					new OptionType(code:"computeServerType.${this.getCode()}.network.name", inputType:OptionType.InputType.TEXT, name:'network name', category:"computeServerType.${this.getCode()}",
-							fieldName:'name', fieldCode: 'gomorpheus.optiontype.NetworkInterface', fieldLabel:'Network Interface', fieldContext:'network', fieldGroup:'Server Options', required:false, enabled:true, editable:false, global:false,
-							placeHolder:null, helpBlock:'', defaultValue:'eth0', custom:false, displayOrder:9, fieldClass:null)
-				]
-			),
+//			new ComputeServerType(code:'selfManagedLinux'),
+//			new ComputeServerType(code:'selfManagedKvm'),
 			new ComputeServerType(
 				code:'upcloudWindows', name:'UpCloud Windows Node', description:'', platform:'windows', nodeType:'morpheus-windows-node',
 				enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:false, creatable:false, computeService:'upCloudComputeService',
 				displayOrder:17, hasAutomation:true,reconfigureSupported: true,
 				containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.host, guestVm:true,
 				provisionTypeCode:'upcloud'
+			),
+			new ComputeServerType(
+				code:'upcloudVm', name:'UpCloud VM Instance', description:'', platform:'linux', nodeType:'morpheus-vm-node',
+				enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:false, creatable:true, computeService:'upCloudComputeService',
+				displayOrder: 0, hasAutomation:true,reconfigureSupported: true,
+				containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.guest, guestVm:true,
+				provisionTypeCode:'upcloud'
+			),
+			new ComputeServerType(
+				code:'upcloudUnmanaged', name:'UpCloud Instance', description:'upcloud vm', platform:'linux', nodeType:'unmanaged',
+				enabled:true, selectable:false, externalDelete:false, managed:false, controlPower:true, controlSuspend:false, creatable:false, computeService:'upCloudComputeService',
+				displayOrder:99, hasAutomation:false,
+				containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.host, managedServerType:'upcloudVm', guestVm:true,
+				provisionTypeCode:'upcloud',
+					optionTypes: [
+							new OptionType(code:'computeServerType.global.sshHost'),
+							new OptionType(code:'computeServerType.global.sshPort'),
+							new OptionType(code:'computeServerType.global.sshUsername'),
+							new OptionType(code:'computeServerType.global.sshPassword')
+					]
 			),
 			new ComputeServerType(
 				code:'upcloudLinux', name:'UpCloud Docker Host', description:'', platform:'linux', nodeType:'morpheus-node',
@@ -236,40 +224,20 @@ class UpcloudCloudProvider implements CloudProvider {
 				computeTypeCode:'docker-host'
 			),
 			new ComputeServerType(
-				code:'upcloudVm', name:'UpCloud VM Instance', description:'', platform:'linux', nodeType:'morpheus-vm-node',
-				enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:false, creatable:true, computeService:'upCloudComputeService',
-				displayOrder: 0, hasAutomation:true,reconfigureSupported: true,
-				containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.guest, guestVm:true,
-				provisionTypeCode:'upcloud'
+				code:'upcloudKubeMaster', name:'UpCloud Kubernetes Master', description:'', platform:'linux', nodeType:'kube-master',
+				reconfigureSupported: true, enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:true, creatable:true,
+				supportsConsoleKeymap: true, computeService:'upCloudComputeService', displayOrder:10,
+				hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.host, containerEngine:'docker',
+				provisionTypeCode:'upcloud',
+				computeTypeCode:'kube-master'
 			),
 			new ComputeServerType(
-				code:'selfManagedKvm', name:'Manual KVM Host', description:'', platform:'linux', nodeType:'morpheus-node',
-				enabled:true, selectable:false, externalDelete:false, managed:true, controlPower:false, controlSuspend:false, creatable:false, computeService:'standardComputeService',
-				displayOrder:16, hasAutomation:true,
-				containerHypervisor:false, bareMetalHost:false, vmHypervisor:true, agentType:ComputeServerType.AgentType.guest,
-				provisionTypeCode: 'manual',
-				computeTypeCode: 'kvm-host',
-				optionTypes:[
-					new OptionType(code:"computeServerType.${this.getCode()}.sshHost", inputType:OptionType.InputType.TEXT, name:'sshHost', category:"computeServerType.${this.getCode()}",
-							fieldName:'sshHost', fieldCode: 'gomorpheus.optiontype.Host', fieldLabel:'Host', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
-							required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
-							displayOrder:1, fieldClass:null, fieldSize:15),
-					new OptionType(code:"computeServerType.${this.getCode()}.sshPort", inputType:OptionType.InputType.NUMBER, name:'sshPort', category:"computeServerType.${this.getCode()}",
-							fieldName:'sshPort', fieldCode: 'gomorpheus.optiontype.Port', fieldLabel:'Port', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
-							required:false, enabled:true, editable:false, global:false, placeHolder:'22', helpBlock:'', defaultValue:'22', custom:false,
-							displayOrder:2, fieldClass:null, fieldSize:5),
-					new OptionType(code:"computeServerType.${this.getCode()}.sshUsername", inputType:OptionType.InputType.TEXT, name:'sshUsername', category:"computeServerType.${this.getCode()}",
-							fieldName:'sshUsername', fieldCode: 'gomorpheus.optiontype.User', fieldLabel:'User', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
-							required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
-							displayOrder:3, fieldClass:null),
-					new OptionType(code:"computeServerType.${this.getCode()}.sshPassword", inputType:OptionType.InputType.PASSWORD, name:'sshPassword', category:"computeServerType.${this.getCode()}",
-							fieldName:'sshPassword', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'server', fieldSet:'sshConnection', fieldGroup:'Connection Config',
-							required:false, enabled:true, editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false,
-							displayOrder:4, fieldClass:null),
-					new OptionType(code:"computeServerType.${this.getCode()}.provisionKey", inputType:OptionType.InputType.SELECT, name:'provisionKey', category:"computeServerType.${this.getCode()}",
-							fieldName:'provisionKey', fieldCode: 'gomorpheus.optiontype.SshKey', fieldLabel:'SSH Key', fieldContext:'config', fieldGroup:'Options', required:false, enabled:true, optionSource: 'privateKeys',
-							editable:false, global:false, placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:5, fieldClass:null)
-				]
+				code:'upcloudKubeWorker', name:'UpCloud Kubernetes Worker', description:'', platform:'linux', nodeType:'kube-worker',
+				reconfigureSupported: true, enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:true, creatable:true,
+				supportsConsoleKeymap: true, computeService:'upCloudComputeService', displayOrder:10,
+				hasAutomation:true, containerHypervisor:true, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.host, containerEngine:'docker',
+				provisionTypeCode:'upcloud',
+				computeTypeCode:'kube-worker'
 			)
 		]
 

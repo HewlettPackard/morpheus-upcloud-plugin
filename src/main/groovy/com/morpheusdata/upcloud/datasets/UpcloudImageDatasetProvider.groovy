@@ -90,7 +90,6 @@ class UpcloudImageDatasetProvider extends AbstractDatasetProvider<VirtualImage, 
 
     DataQuery buildQuery(DatasetQuery datasetQuery) {
         Long cloudId = datasetQuery.get("zoneId")?.toLong()
-        List<String> supportedImageTypes = getImageTypes()
         DataQuery query  = new DatasetQuery().withFilters(
                 new DataOrFilter(
                         new DataFilter("visibility", "public"),

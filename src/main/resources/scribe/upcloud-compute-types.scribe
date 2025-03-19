@@ -1,0 +1,605 @@
+//docker host
+resource "workload-type" "docker-upcloud-ubuntu-16_04" {
+    code             = "docker-upcloud-ubuntu-16.04"
+    shortName        = "ubuntu"
+    name             = "Docker Ubuntu 16.04"
+    ports            = [22]
+    containerVersion = "16.04"
+    repositoryImage  = null
+    imageCode        = "morpheus ubuntu 16.04"
+    entryPoint       = null
+    mountLogs        = "/var/log"
+    statTypeCode     = "server"
+    logTypeCode      = "ubuntu"
+    showServerLogs   = true
+    category         = "ubuntu"
+    cloneType        = "ubuntu"
+    priorityOrder    = 0
+    serverType       = "vm"
+    providerType     = "upcloud"
+    checkTypeCode    = "vmCheck"
+    virtualImage     = virtual-image.upcloud-image-morpheus-ubuntu-20.04
+    containerPorts   = [{code = "ubuntu.22"}]
+    provisionType    = "upcloud"
+}
+
+resource "compute-type-set" "docker-upcloud-ubuntu-16_04-set" {
+    code                    = "docker-upcloud-ubuntu-16.04-set"
+    name                    = "docker host"
+    workloadType            = workload-type.docker-upcloud-ubuntu-16_04
+    computeServerType       = compute-server-type.upcloud-linux
+    category                = "ubuntu"
+    priorityOrder           = 0
+    dynamicCount            = true
+    nodeCount               = 1
+    nodeType                = "worker"
+    canAddNodes             = true
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-layout" "docker-upcloud-ubuntu-16_04-single" {
+    code              = "docker-upcloud-ubuntu-16.04-single"
+    name              = "UpCloud Docker Host"
+    sortOrder         = 5
+    computeVersion    = "16.04"
+    description       = "This will provision a single docker host vm in upcloud"
+    type              = compute-server-type.upcloud-linux
+    serverCount       = 1
+    memoryRequirement = 1024 * 1024 * 1024
+    hasAutoScale      = true
+    groupType         = compute-server-group-type.docker-cluster
+    computeServers    = ["docker-upcloud-ubuntu-16.04-set"]
+    provisionType     = "upcloud"
+}
+
+//kubernetes master - weave - openebs
+resource "workload-type" "kubernetes-upcloud-ubuntu-16_04" {
+    code             = "kubernetes-upcloud-ubuntu-16.04"
+    shortName        = "kubernetes-ubuntu"
+    name             = "Kubernetes 1.14 Cluster on Ubuntu 16.04"
+    containerVersion = "16.04"
+    repositoryImage  = null
+    imageCode        = "morpheus ubuntu 16.04"
+    entryPoint       = null
+    mountLogs        = "/var/log"
+    statTypeCode     = "server"
+    logTypeCode      = "ubuntu"
+    showServerLogs   = true
+    category         = "ubuntu"
+    cloneType        = "ubuntu"
+    priorityOrder    = 0
+    serverType       = "vm"
+    providerType     = "upcloud"
+    checkTypeCode    = "vmCheck"
+    virtualImage     = virtual-image.upcloud-image-morpheus-ubuntu-20.04
+    containerPorts   = [{code = "ubuntu.22"}]
+    provisionType    = "upcloud"
+    scripts = [
+        {code = "kube-kubeadm-install-curl-1_14_1"},
+        {code = "kube-kubeadm-init"},
+        {code = "kube-kubeadm-copy-config"},
+        {code = "kube-kubeadm-iscsi-install-curl"},
+        {code = "kube-kubeadm-install-openebs-1-0-0-curl"},
+        {code = "kube-kubeadm-create-service-account"},
+        {code = "kube-kubeadm-check-pods"},
+        {code = "kube-kubeadm-install-weave"},
+        {code = "kube-kubeadm-install-openebs-1-0-0"},
+        {code = "kube-install-fluentbit"}
+    ]
+    templates = [
+        {code = "kube-logging-fluentbit-service-spec"},
+        {code = "kube-logging-fluentbit-role-spec"},
+        {code = "kube-logging-fluentbit-role-binding-spec"},
+        {code = "kube-logging-fluentbit-config-spec"},
+        {code = "kube-logging-fluentbit-daemon-spec"}
+    ]
+}
+
+resource "workload-type" "kubernetes-upcloud-worker-ubuntu-16_04" {
+    code             = "kubernetes-upcloud-worker-ubuntu-16.04"
+    shortName        = "kubernetes-worker-ubuntu"
+    name             = "Kubernetes Worker 1.14 on Ubuntu 16.04"
+    containerVersion = "16.04"
+    repositoryImage  = null
+    imageCode        = "morpheus ubuntu 16.04"
+    entryPoint       = null
+    mountLogs        = "/var/log"
+    statTypeCode     = "server"
+    logTypeCode      = "ubuntu"
+    showServerLogs   = true
+    category         = "ubuntu"
+    cloneType        = "ubuntu"
+    priorityOrder    = 0
+    serverType       = "vm"
+    providerType     = "upcloud"
+    checkTypeCode    = "vmCheck"
+    virtualImage     = virtual-image.upcloud-image-morpheus-ubuntu-20.04
+    containerPorts   = [{code = "ubuntu.22"}]
+    provisionType    = "upcloud"
+    scripts = [
+        {code = "kube-kubeadm-install-curl-1_14_1"},
+        {code = "kube-kubeadm-iscsi-install-curl"},
+        {code = "kube-kubeadm-worker-join"}
+    ]
+}
+
+resource "compute-type-set" "kubernetes-upcloud-ubuntu-16_04-set" {
+    code                    = "kubernetes-upcloud-ubuntu-16.04-set"
+    name                    = "kubernetes master"
+    workloadType            = workload-type.kubernetes-upcloud-ubuntu-16_04
+    computeServerType       = compute-server-type.upcloud-kube-master
+    category                = "ubuntu"
+    priorityOrder           = 0
+    dynamicCount            = false
+    nodeCount               = 1
+    nameSuffix              = "-master"
+    nodeType                = "master"
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-set" "kubernetes-worker-upcloud-ubuntu-16_04-set" {
+    code                    = "kubernetes-worker-upcloud-ubuntu-16.04-set"
+    name                    = "kubernetes worker"
+    workloadType            = workload-type.kubernetes-upcloud-worker-ubuntu-16_04
+    computeServerType       = compute-server-type.upcloud-kube-worker
+    category                = "ubuntu"
+    priorityOrder           = 1
+    dynamicCount            = true
+    nodeCount               = 3
+    nameSuffix              = "-worker"
+    nodeType                = "worker"
+    canAddNodes             = true
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-layout" "kubernetes-upcloud-ubuntu-16_04-single" {
+    code              = "kubernetes-upcloud-ubuntu-16.04-single"
+    name              = "Kubernetes 1.14 Cluster on Ubuntu 16.04, Weave, OpenEBS"
+    sortOrder         = 40
+    computeVersion    = "16.04"
+    description       = "This will provision a single kubernetes master in upcloud with weave and openebs"
+    type              = compute-server-type.upcloud-kube-master
+    serverCount       = 4
+    memoryRequirement = 1024 * 1024 * 1024
+    hasAutoScale      = true
+    enabled           = false
+    creatable         = false
+    groupType         = compute-server-group-type.kubernetes-cluster
+    computeServers    = [
+        {code = "kubernetes-upcloud-ubuntu-16.04-set"},
+        {code = "kubernetes-worker-upcloud-ubuntu-16.04-set"}
+    ]
+    provisionType     = "upcloud"
+    optionTypes       = [{code = "kubernetes.master.podCidr"}]
+}
+
+//kubernetes ha cluster - weave - openebs
+resource "workload-type" "kubernetes-upcloud-ha-master-ubuntu-16_04" {
+    code             = "kubernetes-upcloud-ha-master-ubuntu-16.04"
+    shortName        = "kubernetes-ubuntu"
+    name             = "Kubernetes HA Master 1.14 on Ubuntu 16.04"
+    containerVersion = "16.04"
+    repositoryImage  = null
+    imageCode        = "morpheus ubuntu 16.04"
+    entryPoint       = null
+    mountLogs        = "/var/log"
+    statTypeCode     = "server"
+    logTypeCode      = "ubuntu"
+    showServerLogs   = true
+    category         = "ubuntu"
+    cloneType        = "ubuntu"
+    priorityOrder    = 0
+    serverType       = "vm"
+    providerType     = "upcloud"
+    checkTypeCode    = "vmCheck"
+    virtualImage     = virtual-image.upcloud-image-morpheus-ubuntu-20.04
+    containerPorts   = [{code = "ubuntu.22"}]
+    provisionType    = "upcloud"
+    scripts = [
+        {code = "kube-kubeadm-cluster-master-prep"},
+        {code = "kube-kubeadm-cluster-shared-key"},
+        {code = "kube-kubeadm-install-curl-1_14_1"},
+        {code = "kube-kubeadm-cluster-master-init-1_14_1"},
+        {code = "kube-kubeadm-copy-config"},
+        {code = "kube-kubeadm-iscsi-install-curl"},
+        {code = "kube-kubeadm-install-openebs-1-0-0-curl"},
+        {code = "kube-kubeadm-create-service-account"},
+        {code = "kube-kubeadm-check-pods"},
+        {code = "kube-kubeadm-cluster-install-weave"},
+        {code = "kube-kubeadm-cluster-install-openebs-1-0-0"},
+        {code = "kube-install-fluentbit"}
+    ]
+    templates = [
+        {code = "kube-kubeadm-cluster-master-config-1_14_1"},
+        {code = "kube-logging-fluentbit-service-spec"},
+        {code = "kube-logging-fluentbit-role-spec"},
+        {code = "kube-logging-fluentbit-role-binding-spec"},
+        {code = "kube-logging-fluentbit-config-spec"},
+        {code = "kube-logging-fluentbit-daemon-spec"}
+    ]
+}
+
+resource "workload-type" "kubernetes-upcloud-ha-add-master-ubuntu-16_04" {
+    code             = "kubernetes-upcloud-ha-add-master-ubuntu-16.04"
+    shortName        = "kubernetes-ubuntu"
+    name             = "Kubernetes HA Add Master 1.14 on Ubuntu 16.04"
+    containerVersion = "16.04"
+    repositoryImage  = null
+    imageCode        = "morpheus ubuntu 16.04"
+    entryPoint       = null
+    mountLogs        = "/var/log"
+    statTypeCode     = "server"
+    logTypeCode      = "ubuntu"
+    showServerLogs   = true
+    category         = "ubuntu"
+    cloneType        = "ubuntu"
+    priorityOrder    = 0
+    serverType       = "vm"
+    providerType     = "upcloud"
+    checkTypeCode    = "vmCheck"
+    virtualImage     = virtual-image.upcloud-image-morpheus-ubuntu-20.04
+    containerPorts   = [{code = "ubuntu.22"}]
+    provisionType    = "upcloud"
+    scripts = [
+        {code = "kube-kubeadm-cluster-master-prep"},
+        {code = "kube-kubeadm-cluster-shared-key"},
+        {code = "kube-kubeadm-install-curl-1_14_1"},
+        {code = "kube-kubeadm-cluster-add-master-certs"},
+        {code = "kube-kubeadm-iscsi-install-curl"},
+        {code = "kube-kubeadm-cluster-add-master-init-1_14_1"},
+        {code = "kube-kubeadm-copy-config"}
+    ]
+    templates = [{code = "kube-kubeadm-cluster-add-master-config-1_14_1"}]
+}
+
+resource "compute-type-set" "kubernetes-upcloud-ha-master-ubuntu-16_04-set" {
+    code                    = "kubernetes-upcloud-ha-master-ubuntu-16.04-set"
+    name                    = "kubernetes master"
+    workloadType            = workload-type.kubernetes-upcloud-ha-master-ubuntu-16_04
+    computeServerType       = compute-server-type.upcloud-kube-master
+    category                = "ubuntu"
+    priorityOrder           = 0
+    dynamicCount            = false
+    nodeCount               = 1
+    nameSuffix              = "-master"
+    nodeType                = "master"
+    forceNameIndex          = true
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-set" "kubernetes-upcloud-ha-add-master-ubuntu-16_04-set" {
+    code                    = "kubernetes-upcloud-ha-add-master-ubuntu-16.04-set"
+    name                    = "kubernetes master"
+    workloadType            = workload-type.kubernetes-upcloud-ha-add-master-ubuntu-16_04
+    computeServerType       = compute-server-type.upcloud-kube-master
+    category                = "ubuntu"
+    priorityOrder           = 1
+    dynamicCount            = false
+    nodeCount               = 2
+    nameSuffix              = "-master"
+    nodeType                = "master"
+    forceNameIndex          = true
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-set" "kubernetes-worker-upcloud-ha-ubuntu-16_04-set" {
+    code                    = "kubernetes-worker-upcloud-ha-ubuntu-16.04-set"
+    name                    = "kubernetes worker"
+    workloadType            = workload-type.kubernetes-upcloud-worker-ubuntu-16_04
+    computeServerType       = compute-server-type.upcloud-kube-worker
+    category                = "ubuntu"
+    priorityOrder           = 2
+    dynamicCount            = true
+    nodeCount               = 3
+    nameSuffix              = "-worker"
+    nodeType                = "worker"
+    forceNameIndex          = true
+    canAddNodes             = true
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-layout" "kubernetes-upcloud-ubuntu-16_04-cluster-weave-openebs" {
+    code              = "kubernetes-upcloud-ubuntu-16.04-cluster-weave-openebs"
+    name              = "Kubernetes 1.14 HA Cluster on Ubuntu 16.04, Weave, OpenEBS"
+    sortOrder         = 45
+    computeVersion    = "16.04"
+    description       = "This will provision a single kubernetes master in upcloud with weave and openebs"
+    type              = compute-server-type.upcloud-kube-master
+    serverCount       = 6
+    memoryRequirement = 2 * 1024 * 1024 * 1024
+    hasAutoScale      = true
+    enabled           = false
+    creatable         = false
+    groupType         = compute-server-group-type.kubernetes-cluster
+    computeServers    = [
+        {code = "kubernetes-upcloud-ha-master-ubuntu-16.04-set"},
+        {code = "kubernetes-upcloud-ha-add-master-ubuntu-16.04-set"},
+        {code = "kubernetes-worker-upcloud-ha-ubuntu-16.04-set"}
+    ]
+    provisionType     = "upcloud"
+    optionTypes       = [
+        {code = "kubernetes.master.podCidr"},
+        {code = "kubernetes.master.clusterHostname"},
+        {code = "kubernetes.master.loadBalancerId"}
+    ]
+}
+
+//Kubernetes 1.17
+		//kubernetes master - weave - openebs
+resource "workload-type" "kubernetes-upcloud-ubuntu-18_04" {
+    code             = "kubernetes-upcloud-ubuntu-18.04"
+    shortName        = "kubernetes-ubuntu"
+    name             = "Kubernetes 1.17 Cluster on Ubuntu 18.04"
+    containerVersion = "18.04"
+    repositoryImage  = null
+    imageCode        = "morpheus ubuntu 18.04"
+    entryPoint       = null
+    mountLogs        = "/var/log"
+    statTypeCode     = "server"
+    logTypeCode      = "ubuntu"
+    showServerLogs   = true
+    category         = "ubuntu"
+    cloneType        = "ubuntu"
+    priorityOrder    = 0
+    serverType       = "vm"
+    providerType     = "upcloud"
+    checkTypeCode    = "vmCheck"
+    virtualImage     = virtual-image.upcloud-image-morpheus-ubuntu-20.04
+    containerPorts   = [{code = "ubuntu.22"}]
+    provisionType    = "upcloud"
+    scripts = [
+        {code = "kube-kubeadm-install-curl-1_17_3"},
+        {code = "kube-kubeadm-init"},
+        {code = "kube-kubeadm-copy-config"},
+        {code = "kube-kubeadm-iscsi-install-curl"},
+        {code = "kube-kubeadm-install-openebs-1-10-0-curl"},
+        {code = "kube-kubeadm-create-service-account"},
+        {code = "kube-kubeadm-check-pods"},
+        {code = "kube-kubeadm-install-weave"},
+        {code = "kube-kubeadm-install-openebs-1-10-0"},
+        {code = "kube-install-fluentbit"}
+    ]
+    templates = [
+        {code = "kube-logging-fluentbit-service-spec"},
+        {code = "kube-logging-fluentbit-role-spec"},
+        {code = "kube-logging-fluentbit-role-binding-spec"},
+        {code = "kube-logging-fluentbit-config-spec"},
+        {code = "kube-logging-fluentbit-daemon-spec-1-16"}
+    ]
+}
+
+resource "workload-type" "kubernetes-upcloud-worker-ubuntu-18_04" {
+    code             = "kubernetes-upcloud-worker-ubuntu-18.04"
+    shortName        = "kubernetes-worker-ubuntu"
+    name             = "Kubernetes Worker 1.17 on Ubuntu 18.04"
+    containerVersion = "18.04"
+    repositoryImage  = null
+    imageCode        = "morpheus ubuntu 18.04"
+    entryPoint       = null
+    mountLogs        = "/var/log"
+    statTypeCode     = "server"
+    logTypeCode      = "ubuntu"
+    showServerLogs   = true
+    category         = "ubuntu"
+    cloneType        = "ubuntu"
+    priorityOrder    = 0
+    serverType       = "vm"
+    providerType     = "upcloud"
+    checkTypeCode    = "vmCheck"
+    virtualImage     = virtual-image.upcloud-image-morpheus-ubuntu-20.04
+    containerPorts   = [{code = "ubuntu.22"}]
+    provisionType    = "upcloud"
+    scripts = [
+        {code = "kube-kubeadm-install-curl-1_17_3"},
+        {code = "kube-kubeadm-iscsi-install-curl"},
+        {code = "kube-kubeadm-worker-join"}
+    ]
+}
+
+resource "compute-type-set" "kubernetes-upcloud-ubuntu-18_04-set" {
+    code                    = "kubernetes-upcloud-ubuntu-18.04-set"
+    name                    = "kubernetes master"
+    workloadType            = workload-type.kubernetes-upcloud-ubuntu-18_04
+    computeServerType       = compute-server-type.upcloud-kube-master
+    category                = "ubuntu"
+    priorityOrder           = 0
+    dynamicCount            = false
+    nodeCount               = 1
+    nameSuffix              = "-master"
+    nodeType                = "master"
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-set" "kubernetes-worker-upcloud-ubuntu-18_04-set" {
+    code                    = "kubernetes-worker-upcloud-ubuntu-18.04-set"
+    name                    = "kubernetes worker"
+    workloadType            = workload-type.kubernetes-upcloud-worker-ubuntu-18_04
+    computeServerType       = compute-server-type.upcloud-kube-worker
+    category                = "ubuntu"
+    priorityOrder           = 1
+    dynamicCount            = true
+    nodeCount               = 3
+    nameSuffix              = "-worker"
+    nodeType                = "worker"
+    canAddNodes             = true
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-layout" "kubernetes-upcloud-ubuntu-18_04-single" {
+    code              = "kubernetes-upcloud-ubuntu-18.04-single"
+    name              = "Kubernetes 1.17 Cluster on Ubuntu 18.04, Weave, OpenEBS"
+    sortOrder         = 20
+    computeVersion    = "18.04"
+    description       = "This will provision a single kubernetes master in upcloud with weave and openebs"
+    type              = compute-server-type.upcloud-kube-master
+    serverCount       = 4
+    memoryRequirement = 1024 * 1024 * 1024
+    hasAutoScale      = true
+    groupType         = compute-server-group-type.kubernetes-cluster
+    computeServers    = [
+        {code = "kubernetes-upcloud-ubuntu-18.04-set"},
+        {code = "kubernetes-worker-upcloud-ubuntu-18.04-set"}
+    ]
+    provisionType     = "upcloud"
+    optionTypes       = [{code = "kubernetes.master.podCidr"}]
+}
+
+//kubernetes ha cluster - weave - openebs
+resource "workload-type" "kubernetes-upcloud-ha-master-ubuntu-18_04" {
+    code             = "kubernetes-upcloud-ha-master-ubuntu-18.04"
+    shortName        = "kubernetes-ubuntu"
+    name             = "Kubernetes HA Master 1.17 on Ubuntu 18.04"
+    containerVersion = "18.04"
+    repositoryImage  = null
+    imageCode        = "morpheus ubuntu 18.04"
+    entryPoint       = null
+    mountLogs        = "/var/log"
+    statTypeCode     = "server"
+    logTypeCode      = "ubuntu"
+    showServerLogs   = true
+    category         = "ubuntu"
+    cloneType        = "ubuntu"
+    priorityOrder    = 0
+    serverType       = "vm"
+    providerType     = "upcloud"
+    checkTypeCode    = "vmCheck"
+    virtualImage     = virtual-image.upcloud-image-morpheus-ubuntu-20.04
+    containerPorts   = [{code = "ubuntu.22"}]
+    provisionType    = "upcloud"
+    scripts = [
+        {code = "kube-kubeadm-cluster-master-prep"},
+        {code = "kube-kubeadm-cluster-shared-key"},
+        {code = "kube-kubeadm-install-curl-1_17_3"},
+        {code = "kube-kubeadm-cluster-master-init-1_17_3"},
+        {code = "kube-kubeadm-copy-config"},
+        {code = "kube-kubeadm-iscsi-install-curl"},
+        {code = "kube-kubeadm-install-openebs-1-10-0-curl"},
+        {code = "kube-kubeadm-create-service-account"},
+        {code = "kube-kubeadm-check-pods"},
+        {code = "kube-kubeadm-cluster-install-weave"},
+        {code = "kube-kubeadm-cluster-install-openebs-1-10-0"},
+        {code = "kube-install-fluentbit"}
+    ]
+    templates = [
+        {code = "kube-kubeadm-cluster-master-config-1_17_3"},
+        {code = "kube-logging-fluentbit-service-spec"},
+        {code = "kube-logging-fluentbit-role-spec"},
+        {code = "kube-logging-fluentbit-role-binding-spec"},
+        {code = "kube-logging-fluentbit-config-spec"},
+        {code = "kube-logging-fluentbit-daemon-spec-1-16"}
+    ]
+}
+
+resource "workload-type" "kubernetes-upcloud-ha-add-master-ubuntu-18_04" {
+    code             = "kubernetes-upcloud-ha-add-master-ubuntu-18.04"
+    shortName        = "kubernetes-ubuntu"
+    name             = "Kubernetes HA Add Master 1.17 on Ubuntu 18.04"
+    containerVersion = "18.04"
+    repositoryImage  = null
+    imageCode        = "morpheus ubuntu 18.04"
+    entryPoint       = null
+    mountLogs        = "/var/log"
+    statTypeCode     = "server"
+    logTypeCode      = "ubuntu"
+    showServerLogs   = true
+    category         = "ubuntu"
+    cloneType        = "ubuntu"
+    priorityOrder    = 0
+    serverType       = "vm"
+    providerType     = "upcloud"
+    checkTypeCode    = "vmCheck"
+    virtualImage     = virtual-image.upcloud-image-morpheus-ubuntu-20.04
+    containerPorts   = [{code = "ubuntu.22"}]
+    provisionType    = "upcloud"
+    scripts = [
+        {code = "kube-kubeadm-cluster-master-prep"},
+        {code = "kube-kubeadm-cluster-shared-key"},
+        {code = "kube-kubeadm-install-curl-1_17_3"},
+        {code = "kube-kubeadm-cluster-add-master-certs"},
+        {code = "kube-kubeadm-iscsi-install-curl"},
+        {code = "kube-kubeadm-cluster-add-master-init-1_17_3"},
+        {code = "kube-kubeadm-copy-config"}
+    ]
+    templates = [{code = "kube-kubeadm-cluster-add-master-config-1_17_3"}]
+}
+
+resource "compute-type-set" "kubernetes-upcloud-ha-master-ubuntu-18_04-set" {
+    code                    = "kubernetes-upcloud-ha-master-ubuntu-18.04-set"
+    name                    = "kubernetes master"
+    workloadType            = workload-type.kubernetes-upcloud-ha-master-ubuntu-18_04
+    computeServerType       = compute-server-type.upcloud-kube-master
+    category                = "ubuntu"
+    priorityOrder           = 0
+    dynamicCount            = false
+    nodeCount               = 1
+    nameSuffix              = "-master"
+    nodeType                = "master"
+    forceNameIndex          = true
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-set" "kubernetes-upcloud-ha-add-master-ubuntu-18_04-set" {
+    code                    = "kubernetes-upcloud-ha-add-master-ubuntu-18.04-set"
+    name                    = "kubernetes master"
+    workloadType            = workload-type.kubernetes-upcloud-ha-add-master-ubuntu-18_04
+    computeServerType       = compute-server-type.upcloud-kube-master
+    category                = "ubuntu"
+    priorityOrder           = 1
+    dynamicCount            = false
+    nodeCount               = 2
+    nameSuffix              = "-master"
+    nodeType                = "master"
+    forceNameIndex          = true
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-set" "kubernetes-worker-upcloud-ha-ubuntu-18_04-set" {
+    code                    = "kubernetes-worker-upcloud-ha-ubuntu-18.04-set"
+    name                    = "kubernetes worker"
+    workloadType            = workload-type.kubernetes-upcloud-worker-ubuntu-18_04
+    computeServerType       = compute-server-type.upcloud-kube-worker
+    category                = "ubuntu"
+    priorityOrder           = 2
+    dynamicCount            = true
+    nodeCount               = 3
+    nameSuffix              = "-worker"
+    nodeType                = "worker"
+    forceNameIndex          = true
+    canAddNodes             = true
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-layout" "kubernetes-upcloud-ubuntu-18_04-cluster-weave-openebs" {
+    code              = "kubernetes-upcloud-ubuntu-18.04-cluster-weave-openebs"
+    name              = "Kubernetes 1.17 HA Cluster on Ubuntu 18.04, Weave, OpenEBS"
+    sortOrder         = 25
+    computeVersion    = "18.04"
+    description       = "This will provision a single kubernetes master in upcloud with weave and openebs"
+    type              = compute-server-type.upcloud-kube-master
+    serverCount       = 6
+    memoryRequirement = 2 * 1024 * 1024 * 1024
+    hasAutoScale      = true
+    groupType         = compute-server-group-type.kubernetes-cluster
+    computeServers    = [
+        {code = "kubernetes-upcloud-ha-master-ubuntu-18.04-set"},
+        {code = "kubernetes-upcloud-ha-add-master-ubuntu-18.04-set"},
+        {code = "kubernetes-worker-upcloud-ha-ubuntu-18.04-set"}
+    ]
+    provisionType     = "upcloud"
+    optionTypes       = [
+        {code = "kubernetes.master.podCidr"},
+        {code = "kubernetes.master.clusterHostname"},
+        {code = "kubernetes.master.loadBalancerId"}
+    ]
+}
