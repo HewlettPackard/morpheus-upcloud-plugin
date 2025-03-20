@@ -517,16 +517,23 @@ class UpcloudCloudProvider implements CloudProvider {
 		if(computeServer?.externalId && (computeServer.managed == true || computeServer.computeServerType?.controlPower)) {
 			def authConfig = plugin.getAuthConfig(computeServer.cloud)
 			def stopResults = UpcloudApiService.stopServer(authConfig, computeServer.externalId)
-			def statusResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'stopped')
-			if (statusResults.success) {
-				def removeResults = UpcloudApiService.removeServer(authConfig, computeServer.externalId)
-				if(removeResults.success) {
-					computeServer.volumes?.each { volume ->
-						if(volume.externalId) {
-							def volumeResults = UpcloudApiService.removeStorage(authConfig, volume.externalId)
+			log.debug("upcloud stopResults: ${stopResults}")
+			if(stopResults.success) {
+				def statusResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'stopped')
+				if(statusResults.success) {
+					def removeResults = UpcloudApiService.removeServer(authConfig, computeServer.externalId)
+					if(removeResults.success) {
+						computeServer.volumes?.each { volume ->
+							if(volume.externalId) {
+								def volumeResults = UpcloudApiService.removeStorage(authConfig, volume.externalId)
+							}
 						}
 					}
+					return ServiceResponse.success()
+				} else {
+					return ServiceResponse.error('Failed to stop server')
 				}
+			} else if(stopResults.errorCode == '404') {
 				return ServiceResponse.success()
 			} else {
 				return ServiceResponse.error('Failed to stop server')

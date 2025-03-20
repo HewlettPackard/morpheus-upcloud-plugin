@@ -206,6 +206,7 @@ class UpcloudApiService {
                 rtn.success = true
             } else {
                 rtn.success = false
+				rtn.errorCode = callResults.errorCode
             }
         } catch (e) {
             log.error "Error on getServerDetail: ${e}", e
@@ -419,7 +420,12 @@ class UpcloudApiService {
                     rtn.results = serverDetail.server
                     pending = false
                     break
-                }
+                } else if(serverDetail.success == false && serverDetail.errorCode == '404') {
+					rtn.success = false
+					rtn.errorCode = serverDetail.errorCode
+					pending false
+					break
+				}
                 attempts ++
                 if(attempts > 100) {
                     pending = false
@@ -440,13 +446,17 @@ class UpcloudApiService {
             def attempts = 0
             while(pending) {
                 def serverDetail = getServerDetail(authConfig, serverId)
-                if(serverDetail.success == true && serverDetail?.server?.state != status) {
-                    log.info("SERVER STATUS: ${serverDetail?.server?.state}")
+				if(serverDetail.success == true && serverDetail?.server?.state != status) {
                     rtn.success = true
                     rtn.results = serverDetail.server
                     pending = false
                     break
-                }
+                } else if(serverDetail.success == false && serverDetail.errorCode == '404') {
+					rtn.success = false
+					rtn.errorCode = serverDetail.errorCode
+					pending = false
+					break
+				}
                 attempts ++
                 if(attempts > 100) {
                     pending = false
@@ -676,6 +686,7 @@ class UpcloudApiService {
                 rtn.success = true
             } else {
                 rtn.success = false
+				rtn.errorCode = callResults.errorCode
             }
         } catch (e) {
             log.error "Error on stopServer: ${e}", e
@@ -710,12 +721,13 @@ class UpcloudApiService {
     }
 
     static removeServer(Map authConfig, String serverId) {
+		log.info("removing server with id: ${serverId}")
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = "/server/${serverId}"
             def callResults = callApi(authConfig, callPath, callOpts, 'DELETE')
-            if(callResults.success == true) {
+            if(callResults.success == true || callResults.errorCode == '404') {
                 rtn.data = callResults.data
                 rtn.success = true
             } else {

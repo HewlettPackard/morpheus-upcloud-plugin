@@ -495,10 +495,16 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			if(workload.server?.externalId) {
 				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
 				def statusResults = UpcloudApiService.waitForServerNotStatus(authConfigMap, workload.server.externalId, 'maintenance')
-				def stopResults = stopServer(workload.server)
-				if(stopResults.success == true) {
-					rtn.success = true
+				if(statusResults.success) {
+					def stopResults = stopServer(workload.server)
+					if(stopResults.success == true) {
+						rtn.success = true
+					}
+				} else if(statusResults.success == false) {
+					rtn.errorCode = statusResults.errorCode
+					rtn.msg = 'stopWorkload: failed to get server status'
 				}
+
 			} else {
 				rtn.success = true
 				rtn.msg = 'stopWorkload: vm not found'
@@ -567,17 +573,23 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		Cloud cloud = server.cloud
 		if(workload.server?.externalId) {
 			def authConfig = plugin.getAuthConfig(cloud)
-			stopWorkload(workload)
-			def statusResult = UpcloudApiService.waitForServerStatus(authConfig, server.externalId, 'stopped')
-			if(statusResult.success == true) {
-				def removeResults = UpcloudApiService.removeServer(authConfig, server.externalId)
-				if (removeResults.success == true) {
-					return ServiceResponse.success()
+			def stopWorkloadResult =  stopWorkload(workload)
+			if(stopWorkloadResult.success) {
+				def statusResult = UpcloudApiService.waitForServerStatus(authConfig, server.externalId, 'stopped')
+				if(statusResult.success == true) {
+					def removeResults = UpcloudApiService.removeServer(authConfig, server.externalId)
+					if(removeResults.success == true) {
+						return ServiceResponse.success()
+					} else {
+						return ServiceResponse.error('Failed to remove vm')
+					}
 				} else {
 					return ServiceResponse.error('Failed to remove vm')
 				}
+			} else if(stopWorkloadResult.success == false && stopWorkloadResult.errorCode == '404') {
+				return ServiceResponse.success()
 			} else {
-				return ServiceResponse.error('Failed to remove vm')
+				return ServiceResponse.error('Failed to stop vm')
 			}
 		} else {
 			return ServiceResponse.error('vm not found')
