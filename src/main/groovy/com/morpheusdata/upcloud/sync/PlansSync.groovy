@@ -69,11 +69,9 @@ class PlansSync {
     private addMissingPlans(Collection<Map> addList) {
         def saves = []
         def upcloudProvisionType = new ProvisionType(code:'upcloud')
-        log.info("PLANS ADD LIST: ${addList}")
         try {
             for (cloudItem in addList) {
                 def name = (cloudItem.custom == true) ? cloudItem.name : getNameForPlan(cloudItem)
-                log.info("PLAN NAME: ${name}")
                 def servicePlan = new ServicePlan(
                         code:"upcloud.plan.${cloudItem.name}",
                         provisionType:upcloudProvisionType,
@@ -113,15 +111,11 @@ class PlansSync {
 
     private updateMatchedPlans(List<SyncTask.UpdateItem<ServicePlan, Map>> updateList) {
         def saves = []
-        log.info("PLAN UPDATE LIST: ${updateList}")
         try {
             for(updateMap in updateList) {
                 def matchedItem = updateMap.masterItem
                 def plan = updateMap.existingItem
                 def name = (matchedItem.custom == true) ? matchedItem.name : getNameForPlan(matchedItem)
-                log.info("PLAN NAME: ${name}")
-                log.info("master item.name: ${matchedItem.name}")
-                log.info("existing item.name: ${plan.name}")
                 def save = false
                 if (plan.name != name) {
                     plan.name = name
@@ -157,7 +151,6 @@ class PlansSync {
 
     def removeMissingPlans(List removeList) {
         def saves = []
-        log.info("PLAN REMOVE LIST: ${removeList}")
         removeList?.each { ServicePlanIdentityProjection it ->
             ServicePlan servicePlan = morpheusContext.async.servicePlan.get(it.id).blockingGet()
             servicePlan.active = false
@@ -168,7 +161,6 @@ class PlansSync {
     }
 
     def syncPlanPrices(List<ServicePlan> servicePlans) {
-        log.info("SYNC PLAN PRICES")
         List<String> priceSetCodes = []
         List<AccountPriceSet> priceSets = []
         List<AccountPrice> prices = []
@@ -198,7 +190,6 @@ class PlansSync {
 
             // Iterate the preconfigured plans
             servicePlans?.each { cloudPlan ->
-                log.info("cloudPlan.name: ${cloudPlan.name}")
                 def planName = cloudPlan.name
                 ServicePlan currentServicePlan = new ServicePlan(provisionType: upcloudProvisionType, externalId: planName, active: true)
                 if (currentServicePlan && currentServicePlan.internalId != 'custom') {

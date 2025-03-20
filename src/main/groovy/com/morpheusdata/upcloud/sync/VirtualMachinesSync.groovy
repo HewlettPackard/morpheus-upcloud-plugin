@@ -114,8 +114,6 @@ class VirtualMachinesSync {
                     if(serverResults.volumes) {
                         def maxStorage = serverResults.volumes.sum{ volume -> (volume.size ?: 0) }
                         addCapacityConfig.maxStorage = maxStorage * ComputeUtility.ONE_GIGABYTE
-                        log.info("maxStorage: ${maxStorage}")
-                        log.info("serverResults.volumes: ${serverResults.volumes}")
                     }
                     //plan
                     ServicePlan servicePlan = new ServicePlan([id: findServicePlanMatch(servicePlans.toList().blockingGet(), serverResults.server).id])
@@ -128,15 +126,10 @@ class VirtualMachinesSync {
                 //addCapacityConfig.server = add
                 add.capacityInfo = new ComputeCapacityInfo(addCapacityConfig)
                 adds << add
-                log.info("add.id: ${add.getId()}")
-                log.info("add.id: ${add.externalId}")
-                log.info("server results volumes: ${serverResults.volumes}")
                 serverAdds[add.externalId] = serverResults.volumes
             }
-            log.info("serverAdds: ${serverAdds}")
 
             morpheusContext.async.computeServer.bulkCreate(adds).blockingGet()
-            log.info("adds: ${adds}")
             adds?.each {
                 cacheVirtualMachineVolumes(it, null, serverAdds[it.externalId])
             }
@@ -278,7 +271,6 @@ class VirtualMachinesSync {
                 }
             }
             morpheusContext.async.computeServer.bulkSave(saves).blockingGet()
-            log.info("saves: ${saves}")
             saves?.each { it ->
                 cacheVirtualMachineVolumes(it, savesCloudServers[it.id], savesVolumes[it.id])
             }
@@ -306,12 +298,6 @@ class VirtualMachinesSync {
     }
 
     private cacheVirtualMachineVolumes(ComputeServer server, Map cloudServer, List volumes) {
-        log.info("server volumes: ${(server.volumes).getClass()}")
-        log.info("server volumes: ${(server.volumes)}")
-        log.info("cloud server: ${cloudServer.getClass()}")
-        log.info("cloud server: ${cloudServer}")
-        log.info("volumes: ${volumes.getClass()}")
-        log.info("volumes: ${volumes}")
         def saveRequired = false
         try {
             //ignore servers that are being resized
@@ -347,8 +333,6 @@ class VirtualMachinesSync {
                 log.debug("processing update item: ${updateMap}")
                 def existingVolume = updateMap.existingItem
                 def cloudVolume = updateMap.masterItem
-                log.info("update existing volume: ${existingVolume.deviceName}")
-                log.info("update cloud volume: ${cloudVolume.index}")
                 def volumeId = existingVolume.externalId
                 def save = false
                 if(existingVolume.maxStorage != cloudVolume.size * ComputeUtility.ONE_GIGABYTE) {
@@ -356,7 +340,6 @@ class VirtualMachinesSync {
                     save = true
                 }
                 def volumeName = new UpcloudProvisionProvider(plugin, morpheusContext).getDiskName((int)(cloudVolume.index))
-                log.info("volume name: ${volumeName}")
                 def deviceDisplayName = UpcloudProvisionProvider.extractDiskDisplayName(volumeName)
                 if(deviceDisplayName != existingVolume.deviceDisplayName) {
                     existingVolume.deviceDisplayName = deviceDisplayName

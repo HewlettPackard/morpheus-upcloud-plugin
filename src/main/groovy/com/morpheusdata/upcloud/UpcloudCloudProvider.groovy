@@ -539,7 +539,7 @@ class UpcloudCloudProvider implements CloudProvider {
 				return ServiceResponse.error('Failed to stop server')
 			}
 		} else {
-			log.info("deleteServer - ignoring request for unmanaged instance")
+			log.debug("deleteServer - ignoring request for unmanaged instance")
 		}
 		ServiceResponse.success()
 	}

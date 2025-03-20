@@ -173,14 +173,12 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 	@Override
 	ServiceResponse<BackupExecutionResponse> executeBackup(Backup backup, BackupResult backupResult, Map executionConfig, Cloud cloud, ComputeServer computeServer, Map opts) {
 		ServiceResponse<BackupExecutionResponse> rtn = ServiceResponse.prepare(new BackupExecutionResponse(backupResult))
-		log.info("execution config: ${executionConfig}")
 		try {
 			log.debug("backupConfig container: {}", rtn.data)
 
 			Workload workload = morpheus.services.workload.get(rtn.data.backupResult.containerId)
 			Instance instance = morpheus.services.instance.get(workload.instance.id)
 			def snapshotName = "${instance.name}.${workload.id}.${System.currentTimeMillis()}".toString()
-			log.info("snapshot name: ${snapshotName}")
 			//sync for non windows
 			if(computeServer.serverOs?.platform != 'windows') {
 				morpheus.executeCommandOnServer(computeServer, 'sync')
@@ -205,7 +203,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 					snapshotResults << [volume: volume, snapshotResult: snapshotResult]
 				}
 			}
-			log.info("backup complete: {}", snapshotResults)
+			log.debug("backup complete: {}", snapshotResults)
 			if(snapshotSuccess == true) {
 				def totalSize = 0
 
@@ -225,9 +223,6 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 				//rtn.data.backupResult.providerType = 'upcloud'
 				rtn.data.backupResult.setConfigProperty("snapshots", snapshots)
 				rtn.data.updates = true
-				log.info("rtn.data: ${rtn.data}")
-				log.info("rtn.data.backupResult: ${rtn.data.backupResult}")
-				log.info("rtn.data config property: ${rtn.data.backupResult.getConfigMap()}")
 			} else {
 				//error
 				def errorSnapshots = snapshotResults.findAll{ it.snapshotResult.success != true && it.snapshotResult.msg }
@@ -241,7 +236,6 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 				snapshotResults.each { snapshotResult ->
 					def snapshotStatus = UpcloudApiService.waitForStorageStatus(authConfig, snapshotResult.data?.storage?.uuid, 'online')
 				}
-				log.info("call to refresh backup 241")
 				refreshBackupResult(rtn.data.backupResult)
 			}
 		} catch(e) {
@@ -266,23 +260,16 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 	@Override
 	ServiceResponse<BackupExecutionResponse> refreshBackupResult(BackupResult backupResult) {
 		ServiceResponse<BackupExecutionResponse> rtn = ServiceResponse.prepare(new BackupExecutionResponse(backupResult))
-		log.info("refreshing backup result")
 		try {
 			log.debug("syncBackupResult {}", backupResult)
 			def config = backupResult.getConfigMap()
 			def snapshotList = config.snapshots
-			log.info("snapshot list: ${snapshotList}")
 
 			if (snapshotList?.size() > 0) {
-				log.info("snapshot list size > 0")
 				def workload = morpheus.services.workload.get(backupResult.containerId)
 				def instance = morpheus.services.instance.get(workload.instance.id)
 				def server = morpheus.services.computeServer.get(workload.server.id)
 				def cloud = morpheus.services.cloud.get(server.cloud.id)
-				log.info("workload: ${workload}")
-				log.info("instance: ${instance}")
-				log.info("server: ${server}")
-				log.info("cloud: ${cloud}")
 				//auth config
 				def authConfig = plugin.getAuthConfig(cloud)
 				def statusResults = []
@@ -291,14 +278,11 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 				def totalSize = 0
 				snapshotList?.each { snapshot ->
 					def statusResult = UpcloudApiService.getStorageDetails(authConfig, snapshot.storageId)
-					log.info("status result: ${statusResult}")
 					statusResults << statusResult
 					statusSuccess = statusResult.success && statusSuccess
 					statusComplete = statusComplete && (statusResult.data?.storage?.state == 'online')
 					totalSize += (statusResult.data?.storage?.size?.toLong() ?: 0)
-					log.info("status success: ${statusSuccess}")
-					log.info("status complete: ${statusComplete}")
-					log.info("total size: ${totalSize}")
+
 				}
 				if (statusSuccess == true && statusComplete == true) {
 					rtn.data.updates = true
@@ -313,14 +297,11 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 						rtn.data.backupResult.durationMillis = endDate.time - startDate.time
 
 					rtn.success = true
-					log.info("rtn.data: ${rtn.data}")
-
 				}
 			}
 		} catch (Exception e) {
 			log.error("refreshBackupResult error: {}", e, e)
 		}
-		log.info("exiting refresh backup result")
 		return rtn
 	}
 	

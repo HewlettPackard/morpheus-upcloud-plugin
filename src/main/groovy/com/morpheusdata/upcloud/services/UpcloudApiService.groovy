@@ -192,7 +192,6 @@ class UpcloudApiService {
     }
 
     static getServerDetail(Map authConfig, String serverId) {
-        log.info("getting server detail for server: ${serverId}")
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -269,7 +268,6 @@ class UpcloudApiService {
 
     static createServer(Map authConfig, Map serverConfig) {
         log.debug("serverConfig: ${serverConfig}")
-        log.info("account: ${serverConfig.account.id}")
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -316,8 +314,6 @@ class UpcloudApiService {
             //data disks?
             if(serverConfig.dataDisks) {
                 serverConfig.dataDisks?.eachWithIndex { StorageVolume dataDisk, index ->
-                    log.info("dataDisk: ${dataDisk}")
-                    log.info("dataDisk: ${dataDisk.dump()}")
                     def diskSize = (int)dataDisk.maxStorage.div(ComputeUtility.ONE_GIGABYTE)
                     def diskData = [action: 'create',
                                     size:diskSize,
@@ -356,7 +352,6 @@ class UpcloudApiService {
             //create server
             log.debug("callOpts: ${callOpts}")
             def callResults = callApi(authConfig, callPath, callOpts, 'POST')
-            log.info("call api results: ${callResults}")
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.server = rtn.data?.server
@@ -380,7 +375,6 @@ class UpcloudApiService {
             def attempts = 0
             while(pending) {
                 def serverDetail = getServerDetail(authConfig, serverId)
-                log.info("wait for server exists get server detail: ${serverDetail}")
                 if(serverDetail.success == true && serverDetail?.server?.state == 'started') {
                     def privateIp = serverDetail.server?.'ip_addresses'?.'ip_address'?.find{ it.access == 'utility' && it.family == 'IPv4' }
                     if(privateIp?.address) {
@@ -415,7 +409,6 @@ class UpcloudApiService {
                 def serverDetail = getServerDetail(authConfig, serverId)
                 log.debug("serverDetail: ${serverDetail}")
                 if(serverDetail.success == true && serverDetail?.server?.state == status) {
-                    log.info("SERVER STATUS: ${serverDetail?.server?.state}")
                     rtn.success = true
                     rtn.results = serverDetail.server
                     pending = false
@@ -647,15 +640,12 @@ class UpcloudApiService {
     }*/
 
     static startServer(Map authConfig, String serverId) {
-        log.info("calling upcloud api service start server")
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = "/server/${serverId}/start"
             def callResults = callApi(authConfig, callPath, callOpts, 'POST')
-            log.info("call results: ${callResults}")
             if(callResults.success == true || (callResults.success == false && callResults.errors.error.endsWith("Read timed out"))) {
-                log.info("read timed out error caught")
                 rtn.data = callResults.data
                 rtn.success = true
             } else {
@@ -665,7 +655,6 @@ class UpcloudApiService {
             log.error "Error on startServer: ${e}", e
             rtn.success = false
         }
-        log.info("start server rtn: ${rtn}")
         return rtn
     }
 
@@ -721,7 +710,7 @@ class UpcloudApiService {
     }
 
     static removeServer(Map authConfig, String serverId) {
-		log.info("removing server with id: ${serverId}")
+		log.debug("removing server with id: ${serverId}")
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -875,7 +864,7 @@ class UpcloudApiService {
     }
 
     static restoreSnapshot(Map authConfig, String storageId) {
-        log.info("restoring snapshot with storage id: ${storageId}")
+        log.debug("restoring snapshot with storage id: ${storageId}")
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -908,14 +897,13 @@ class UpcloudApiService {
     }*/
 
     static ServiceResponse callApi(Map authConfig, String path, Map opts = [:], String method) {
-        log.info("in call api")
         def apiUrl = authConfig.apiUrl.toString()
         def username = authConfig.username.toString()
         def password = authConfig.password.toString()
         def apiVersion = authConfig.apiVersion ?: upcloudApiVersion
         def apiPath = "${apiVersion}${path}".toString()
         //log.info("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${JsonOutput.prettyPrint(JsonOutput.toJson(opts + [password: '*******']))}")
-        log.info("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${opts}")
+        log.debug("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${opts}")
 
         RequestOptions requestOptions = new RequestOptions(headers: [:])
         if(opts.body) {
@@ -937,15 +925,7 @@ class UpcloudApiService {
         requestOptions.headers['Content-Type'] = 'application/json'
 
         HttpApiClient client = new HttpApiClient()
-        log.info("about to call json api")
-        log.info("apiUrl: ${apiUrl}")
-        log.info("apiPath: ${apiPath}")
-        log.info("username: ${username}")
-        log.info("requestOptions: ${requestOptions.body}, ${requestOptions.queryParams}, ${requestOptions.headers}")
-        log.info("method: ${method}")
-
         ServiceResponse response = client.callJsonApi(apiUrl, apiPath, username, password, requestOptions, method)
-        log.info("called json api: ${response}")
         return response
     }
 }

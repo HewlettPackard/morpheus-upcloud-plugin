@@ -271,9 +271,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	def insertImage(Map runConfig, Map opts) {
 		def taskResults = [success:false, imageId:runConfig.virtualImage.id, virtualImage:runConfig.virtualImage]
 		try {
-			log.info("imageUploadId: ${runConfig.virtualImage.id}")
 			taskResults.success = true
-			log.info("imageUploadTask: ${taskResults}")
 		} catch(imageException) {
 			log.error("imageException: ${imageException}", imageException)
 			taskResults.message = 'Error uploading image'
@@ -371,16 +369,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 						installAgent: (opts.config?.containsKey("noAgent") == false || (opts.config?.containsKey("noAgent") && opts.config.noAgent != true))
 				]
 
-				log.info("workload request cloud init users: ${workloadRequest.usersConfiguration.cloudInitUsers}")
-				log.info("workload request create users: ${workloadRequest.usersConfiguration.createUsers}")
-				log.info("workload request create users keys: ${workloadRequest.usersConfiguration.createUsers.keys}")
-
-				log.info("IN RUN WORKLOAD 319")
-				log.info("opts.config: ${opts.config}")
-				log.info("opts.config.noAgent: ${opts.config.noAgent}")
-				log.info("runConfig.noAgent: ${runConfig.noAgent}")
-				log.info("runConfig.installAgent: ${runConfig.installAgent}")
-
 				if(servicePlan.internalId == 'custom') {
 					runConfig.maxMemory = workload.maxMemory ?: servicePlan.maxMemory
 					runConfig.maxCores = workload.maxCores ?: servicePlan.maxCores
@@ -390,39 +378,27 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				}
 				runConfig.fqdn = runConfig.hostName + '.' + runConfig.domainName
 
-				log.info("runConfig: ${runConfig}")
-
-				log.info("opts.backupSetId: ${opts.backupSetId}")
-				log.info("opts.cloneContainerId: ${opts.cloneContainerId}")
 				if(opts.cloneContainerId && opts.backupSetId) {
 					def snapshot = morpheus.services.backup.backupResult.find(
 							new DataQuery().withFilter("backupSetId", opts.backupSetId)
 							.withFilter("containerId", opts.cloneContainerId))
-					log.info("snapshot 342: ${snapshot.dump()}")
 					def snapshots = snapshot.getConfigProperty("snapshots")
-					log.info("snapshot get config property: ${snapshots}")
 					def rootSnapshot = snapshots?.find{ it.root == true }
-					log.info("root snapshot: ${rootSnapshot.dump()}")
 					if(rootSnapshot && rootSnapshot.storageId) {
-						log.info("creating server from snapshot image: ${rootSnapshot.storageId}")
 						runConfig.cloneImageId = rootSnapshot.storageId
 					}
 					// Handle any data disks
 					def dataSnapshots = snapshots?.findAll { !it.root }
-					log.info("data snapshots 353: ${dataSnapshots}")
 					dataSnapshots?.each { dataSnapshot ->
 						def dataDisk = runConfig.dataDisks?.find { !it.getConfigProperty("snapshotUUID") && (int)it.maxStorage.div(ComputeUtility.ONE_GIGABYTE) == (int)dataSnapshot.sizeInGb }
 						dataDisk.setConfigProperty("snapshotUUID",dataSnapshot.storageId)
-						log.info("dataDisk 357: ${dataDisk.dump()}")
 					}
 				}
 				// upload or insert image
 				def imageUploadResults = insertImage(runConfig, opts)
-				log.info("insertImage results: ${imageUploadResults}")
 
 				if(imageUploadResults.success == true) {
 					try {
-						log.info("imageUploadTask onComplete: ${imageUploadResults}")
 						if (imageUploadResults.success == true && imageUploadResults.imageId) {
 							runConfig.virtualImage = morpheus.async.virtualImage.get(imageUploadResults?.virtualImage?.id ?: runConfig.virtualImage.id).blockingGet()
 							runConfig.imageRef = runConfig.virtualImage.externalId
@@ -430,12 +406,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 							provisionResponse.noAgent = runConfig.noAgent
 							provisionResponse.installAgent = runConfig.installAgent
 
-							log.info("IN RUN WORKLOAD, IMAGE UPLOAD RESULTS SUCCESS 367")
-							log.info("provisionResponse.noAgent: ${provisionResponse.noAgent}")
-							log.info("provisionResponse.installAgent: ${provisionResponse.installAgent}")
-
 							runVirtualMachine(runConfig, provisionResponse, opts)
-							log.info("after run virtual machine")
 						} else {
 							provisionResponse.setError(imageUploadResults.message)
 							return new ServiceResponse(success: false, msg: imageUploadResults.message, e: null, data: provisionResponse)
@@ -460,9 +431,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			} else {
 //				provisionResponse.noAgent = true
 //				provisionResponse.installAgent = false
-				log.info("IN RUN WORKLOAD, RETURNING SUCCESS 397")
-				log.info("provisionResponse.noAgent: ${provisionResponse.noAgent}")
-				log.info("provisionResponse.installAgent: ${provisionResponse.installAgent}")
 				return new ServiceResponse<ProvisionResponse>(success: true, data: provisionResponse)
 			}
 		} catch (e) {
@@ -537,7 +505,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					rtn.msg = "${startResults.msg}" ?: 'Failed to start vm'
 				}
 			} else {
-				log.info("startWorkload: vm not found")
+				log.debug("startWorkload: vm not found")
 			}
 		} catch(e) {
 			log.error("startContainer error: ${e}", e)
@@ -568,7 +536,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse removeWorkload(Workload workload, Map opts) {
-		log.info "removeWorkload: ${workload} ${opts}"
+		log.debug "removeWorkload: ${workload} ${opts}"
 		ComputeServer server = workload.server
 		Cloud cloud = server.cloud
 		if(workload.server?.externalId) {
@@ -626,16 +594,12 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse stopServer(ComputeServer computeServer) {
-		log.info("calling stop server provision provider: ${computeServer}")
 		if(computeServer.managed == true || computeServer.computeServerType?.controlPower) {
 			def authConfig = plugin.getAuthConfig(computeServer.cloud)
 			def statusResults = UpcloudApiService.waitForServerNotStatus(authConfig, computeServer.externalId, 'maintenance')
-			log.info("status results: ${statusResults}")
 			def stopResults = UpcloudApiService.stopServer(authConfig, computeServer.externalId)
-			log.info("stop results: ${stopResults}")
 			if (stopResults.success) {
 				def waitResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'stopped')
-				log.info("wait results: ${waitResults}")
 				if(waitResults.success) {
 					return ServiceResponse.success()
 				} else {
@@ -645,7 +609,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				return ServiceResponse.error('Failed to stop vm')
 			}
 		} else {
-			log.info("stopServer - ignoring request for unmanaged instance")
+			log.debug("stopServer - ignoring request for unmanaged instance")
 		}
 		return ServiceResponse.success()
 	}
@@ -657,16 +621,12 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
-		log.info("calling start server provision provider: ${computeServer}")
 		if(computeServer.managed == true || computeServer.computeServerType?.controlPower) {
 			def authConfig = plugin.getAuthConfig(computeServer.cloud)
 			def statusResults = UpcloudApiService.waitForServerNotStatus(authConfig, computeServer.externalId, 'maintenance')
-			log.info("status results: ${statusResults}")
 			def startResults = UpcloudApiService.startServer(authConfig, computeServer.externalId)
-			log.info("start results: ${startResults}")
 			if(startResults.success == true) {
 				def waitResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'started')
-				log.info("wait results: ${waitResults}")
 				if(waitResults.success == true) {
 					return ServiceResponse.success()
 				} else {
@@ -676,7 +636,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				return ServiceResponse.error('Failed to start vm')
 			}
 		} else {
-			log.info("startServer - ignoring request for unmanaged instance")
+			log.debug("startServer - ignoring request for unmanaged instance")
 		}
 		return ServiceResponse.success()
 	}
@@ -751,9 +711,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		//set install agent
 		runConfig.installAgent = runConfig.noAgent && server.cloud.agentMode != 'cloudInit'
 
-		log.info("RUNCONFIG ROOT VOLUME DISK TYPE: ${runConfig.rootVolume.diskType}")
 		def createResults = UpcloudApiService.createServer(runConfig.authConfig, runConfig)
-		log.info("create server results success ${createResults.success}")
 		log.debug("Upcloud Create Server Results: {}",createResults)
 		if(createResults.success == true && createResults.server) {
 			server.externalId = createResults.externalId
@@ -764,24 +722,18 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			runConfig.server = server
 
 			UpcloudApiService.waitForServerExists(runConfig.authConfig, createResults.externalId)
-			log.info("wait for server exists complete")
 			// wait for ready
 			def statusResults = UpcloudApiService.checkServerReady(runConfig.authConfig, createResults.externalId)
-			log.info("check server ready: ${statusResults.success}")
 			if (statusResults.success == true) {
 				//good to go
 				def serverDetails = UpcloudApiService.getServerDetail(runConfig.authConfig, createResults.externalId)
-				log.info("server details success: ${serverDetails.success}")
 				if (serverDetails.success == true) {
 					log.debug("server details: {}", serverDetails)
-					log.info("server detail networks: ${serverDetails.networks}")
-					log.info("server detail server: ${serverDetails.server}")
 
 					//update volume info
 					setRootVolumeInfo(runConfig.rootVolume, runConfig.platform, serverDetails.volumes)
 					setVolumeInfo(runConfig.dataDisks, serverDetails.volumes)
 					setNetworkInfo(runConfig.serverInterfaces, serverDetails.networks)
-					log.info("volume info updated")
 					//update network info
 					def privateIp = serverDetails.server.'ip_addresses'?.'ip_address'?.find {
 						it.family == 'IPv4' && it.access == 'utility'
@@ -789,9 +741,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					def publicIp = serverDetails.server.'ip_addresses'?.'ip_address'?.find {
 						it.family == 'IPv4' && it.access == 'public'
 					}
-					log.info("private ip: ${privateIp}")
-					log.info("public ip: ${publicIp}")
-					log.info("network info updated")
 					def serverConfigOpts = [:]
 					applyComputeServerNetwork(server, privateIp.address, publicIp.address, null, null, serverConfigOpts)
 					taskResults.server = createResults.server
@@ -806,7 +755,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		} else {
 			taskResults.message = createResults.msg
 		}
-		log.info("task results success: ${taskResults.success}, server: ${taskResults.server}")
 		return taskResults
 
 	}
@@ -814,7 +762,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	def finalizeVm(Map runConfig, ProvisionResponse provisionResponse, Map runResults) {
 		log.debug("runTask onComplete: provisionResponse: ${provisionResponse}")
 		ComputeServer server = context.async.computeServer.get(runConfig.serverId).blockingGet()
-		log.info("finalize vm server: ${server}")
 		try {
 			if(provisionResponse.success == true) {
 				server.status = 'provisioned'
@@ -861,7 +808,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	}
 
 	def setVolumeInfo(serverVolumes, externalVolumes, doRoot = false) {
-		log.info("external volumes: ${externalVolumes}")
 		try {
 			def maxCount = externalVolumes?.size()
 			serverVolumes.sort{it.displayOrder}.eachWithIndex { volume, index ->
@@ -889,7 +835,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	}
 
 	def setNetworkInfo(serverInterfaces, externalNetworks, newInterface = null) {
-		log.info("networks: ${externalNetworks}")
 		try {
 			if(externalNetworks?.size() > 0) {
 				serverInterfaces?.eachWithIndex { networkInterface, index ->
@@ -910,7 +855,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					}
 				}
 				serverInterfaces?.each { netInt ->
-					log.info("Net Interface: ${netInt.id} -> Network: ${netInt.network?.id}")
+					log.debug("Net Interface: ${netInt.id} -> Network: ${netInt.network?.id}")
 				}
 				context.async.computeServer.computeServerInterface.save(serverInterfaces).blockingGet()
 			}
@@ -920,8 +865,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	}
 
 	private applyComputeServerNetwork(server, privateIp, publicIp = null, hostname = null, networkPoolId = null, configOpts = [:], index = 0, networkOpts = [:]) {
-		log.info("private ip in apply: ${privateIp}")
-		log.info("public ip in apply: ${publicIp}")
 		configOpts.each { k,v ->
 			server.setConfigProperty(k, v)
 		}
@@ -1068,7 +1011,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 //	}
 
 	private void runVirtualMachine(Map runConfig, ProvisionResponse provisionResponse, Map opts) {
-		log.info("in run virtual machine 921")
 		try {
 			// don't think this used
 			// runConfig.template = runConfig.imageId
@@ -1179,12 +1121,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					createOpts.userData = cloudConfigUser
 				}
 
-				log.info("IN RUN HOST")
-				log.info("opts.config: ${opts.config}")
-				log.info("opts.config.noAgent: ${opts.config.noAgent}")
-				log.info("runConfig.noAgent: ${createOpts.noAgent}")
-				log.info("runConfig.installAgent: ${createOpts.installAgent}")
-
 				context.async.computeServer.save(server).blockingGet()
 				//create it
 				log.debug("create server: ${createOpts}")
@@ -1291,7 +1227,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 			resizeRequest.volumesAdd?.each { newVolumeProps ->
 				// new disk add it
-				log.info("Adding New Volume")
+				log.debug("Adding New Volume")
 				//new disk add it
 				if (!newVolumeProps.maxStorage) {
 					newVolumeProps.maxStorage = newVolumeProps.size ? (newVolumeProps.size.toDouble() * ComputeUtility.ONE_GIGABYTE).toLong() : 0
@@ -1327,7 +1263,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				newVolume.internalId = deviceAddress
 				newVolume.deviceName = deviceName
 				newVolume.deviceDisplayName = extractDiskDisplayName(deviceAddress)
-				log.info("Saving Volume")
+				log.debug("Saving Volume")
 				morpheus.async.storageVolume.create([newVolume], server).blockingGet()
 				server = morpheus.async.computeServer.get(server.id).blockingGet()
 				newCounter++
@@ -1389,7 +1325,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					newVolume.internalId = deviceAddress
 					newVolume.deviceName = deviceName
 					newVolume.deviceDisplayName = extractDiskDisplayName(deviceAddress)
-					log.info("Saving Volume")
+					log.debug("Saving Volume")
 					morpheus.async.storageVolume.create([newVolume], server).blockingGet()
 					server = morpheus.async.computeServer.get(server.id).blockingGet()
 					newCounter++
@@ -1397,7 +1333,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			}
 
 			resizeRequest.volumesDelete.each { volume ->
-				log.info("deleting volume : ${volume.externalId}")
+				log.debug("deleting volume : ${volume.externalId}")
 				def volumeId = volume.externalId
 				def volumeAddress = volume.internalId
 				if(volumeAddress) {

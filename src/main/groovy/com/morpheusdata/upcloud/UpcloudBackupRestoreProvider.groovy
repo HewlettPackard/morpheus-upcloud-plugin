@@ -122,7 +122,6 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 		try {
 			def config = backupResult.getConfigMap()
 			def snapshotList = config.snapshots
-			log.info("snapshotList: ${snapshotList}")
 			if(snapshotList?.size() > 0) {
 				def workload = morpheus.async.workload.get(backupResult.containerId).blockingGet()
 				def instance = morpheus.async.instance.get(workload.instance.id).blockingGet()
@@ -142,7 +141,7 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 					restoreSuccess = restoreResult.success && restoreSuccess
 					restoreResults << restoreResult
 				}
-				log.info("restore results: {}", restoreResults)
+				log.debug("restore results: {}", restoreResults)
 				if(restoreSuccess == true) {
 					rtn.data.backupRestore.status = BackupResult.Status.SUCCEEDED
 					rtn.data.backupRestore.externalId = server.externalId
@@ -151,10 +150,7 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 					rtn.data.updates = true
 					//start the server
 					def startResults = new UpcloudProvisionProvider(plugin, morpheus).startServer(server)
-					log.info("server started")
-					log.info("rtn.data.backupRestore: ${rtn.data.backupRestore}")
 				} else {
-					log.info("backup restore failed")
 					rtn.success = false
 					rtn.data.updates = true
 					rtn.data.backupRestore.status = BackupResult.Status.FAILED
