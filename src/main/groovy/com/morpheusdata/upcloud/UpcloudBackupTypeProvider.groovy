@@ -124,7 +124,7 @@ class UpcloudBackupTypeProvider extends AbstractBackupTypeProvider {
 	 */
 	@Override
 	String getRestoreNewMode() {
-		return "VM_RESTORE"
+		return null
 	}
 	
 	/**
@@ -152,7 +152,7 @@ class UpcloudBackupTypeProvider extends AbstractBackupTypeProvider {
 	@Override
 	UpcloudBackupExecutionProvider getExecutionProvider() {
 		if(!this.executionProvider) {
-			this.executionProvider = new UpcloudBackupExecutionProvider(getPlugin())
+			this.executionProvider = new UpcloudBackupExecutionProvider(getPlugin(), getMorpheus())
 		}
 		return this.executionProvider
 	}
@@ -164,7 +164,7 @@ class UpcloudBackupTypeProvider extends AbstractBackupTypeProvider {
 	@Override
 	UpcloudBackupRestoreProvider getRestoreProvider() {
 		if(!this.restoreProvider) {
-		this.restoreProvider = new UpcloudBackupRestoreProvider(getPlugin())
+		this.restoreProvider = new UpcloudBackupRestoreProvider(getPlugin(), getMorpheus())
 		}
 		return this.restoreProvider
 	}

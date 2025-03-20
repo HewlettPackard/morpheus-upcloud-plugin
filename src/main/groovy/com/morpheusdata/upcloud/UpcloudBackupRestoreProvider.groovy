@@ -3,20 +3,24 @@ package com.morpheusdata.upcloud
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupRestoreProvider
+import com.morpheusdata.core.backup.response.BackupRestoreResponse
+import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.response.ServiceResponse;
 import com.morpheusdata.model.BackupRestore;
 import com.morpheusdata.model.BackupResult;
 import com.morpheusdata.model.Backup;
 import com.morpheusdata.model.Instance
+import com.morpheusdata.upcloud.services.UpcloudApiService
+import com.morpheusdata.core.backup.util.BackupStatusUtility
 import groovy.util.logging.Slf4j
 
 @Slf4j
 class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 
-	Plugin plugin
+	UpcloudPlugin plugin
 	MorpheusContext morpheusContext
 
-	UpcloudBackupRestoreProvider(Plugin plugin, MorpheusContext morpheusContext) {
+	UpcloudBackupRestoreProvider(UpcloudPlugin plugin, MorpheusContext morpheusContext) {
 		this.plugin = plugin
 		this.morpheusContext = morpheusContext
 	}
@@ -54,7 +58,7 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 	 */
 	@Override
 	ServiceResponse getBackupRestoreInstanceConfig(BackupResult backupResult, Instance instanceModel, Map restoreConfig, Map opts) {
-		return ServiceResponse.success()
+		return ServiceResponse.success(restoreConfig)
 	}
 
 	/**
@@ -112,7 +116,59 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 	 */
 	@Override
 	ServiceResponse restoreBackup(BackupRestore backupRestore, BackupResult backupResult, Backup backup, Map opts) {
-		return ServiceResponse.success()
+		ServiceResponse<BackupRestoreResponse> rtn = ServiceResponse.prepare(new BackupRestoreResponse(backupRestore))
+		log.debug("restoreBackup {}, opts {}", backupResult, opts)
+
+		try {
+			def config = backupResult.getConfigMap()
+			def snapshotList = config.snapshots
+			log.info("snapshotList: ${snapshotList}")
+			if(snapshotList?.size() > 0) {
+				def workload = morpheus.async.workload.get(backupResult.containerId).blockingGet()
+				def instance = morpheus.async.instance.get(workload.instance.id).blockingGet()
+				def server = morpheus.async.computeServer.get(workload.serverId).blockingGet()
+				def cloud = morpheus.async.cloud.get(server.cloud.id).blockingGet()
+				//auth config
+				def authConfig = plugin.getAuthConfig(cloud)
+				//stop the server
+				def stopResults = new UpcloudProvisionProvider(plugin, morpheus).stopServer(server)
+				//check this - wait for stopped
+				def statusResults = UpcloudApiService.waitForServerStatus(authConfig, server.externalId, 'stopped')
+				//restore
+				def restoreResults = []
+				def restoreSuccess = true
+				snapshotList?.each { snapshot ->
+					def restoreResult = UpcloudApiService.restoreSnapshot(authConfig, snapshot.storageId)
+					restoreSuccess = restoreResult.success && restoreSuccess
+					restoreResults << restoreResult
+				}
+				log.info("restore results: {}", restoreResults)
+				if(restoreSuccess == true) {
+					rtn.data.backupRestore.status = BackupResult.Status.SUCCEEDED
+					rtn.data.backupRestore.externalId = server.externalId
+					rtn.data.backupRestore.startDate = new Date()
+					rtn.success = true
+					rtn.data.updates = true
+					//start the server
+					def startResults = new UpcloudProvisionProvider(plugin, morpheus).startServer(server)
+					log.info("server started")
+					log.info("rtn.data.backupRestore: ${rtn.data.backupRestore}")
+				} else {
+					log.info("backup restore failed")
+					rtn.success = false
+					rtn.data.updates = true
+					rtn.data.backupRestore.status = BackupResult.Status.FAILED
+				}
+			}
+		} catch(e) {
+			log.error("restoreBackup: ${e}", e)
+			rtn.success = false
+			rtn.message = e.getMessage()
+			rtn.data.updates = true
+			rtn.data.backupRestore.status = BackupResult.Status.FAILED
+			rtn.data.backupRestore.errorMessage = e.getMessage()
+		}
+		return rtn
 	}
 
 	/**
@@ -127,6 +183,33 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 	 */
 	@Override
 	ServiceResponse refreshBackupRestoreResult(BackupRestore backupRestore, BackupResult backupResult) {
-		return ServiceResponse.success()
+		log.debug("syncBackupRestoreResult backupRestore: ${backupRestore}")
+		ServiceResponse<BackupRestoreResponse> rtn = ServiceResponse.prepare(new BackupRestoreResponse(backupRestore))
+		def externalId = backupRestore.externalId
+		if(externalId) {
+			//load it
+			def server = morpheus.async.computeServer.find(
+					new DataQuery().withFilter("account", "=", backupRestore.account)
+							.withFilter("externalId", "=", externalId)
+			).blockingGet()
+
+			if(server) {
+				//get status of server
+				def authConfig = plugin.getAuthConfig(server.cloud)
+				def serverDetail = UpcloudApiService.getServerDetail(authConfig, server.externalId)
+				if(serverDetail.success == true && serverDetail?.server?.state == 'started') {
+					//running again
+					rtn.data.backupRestore.endDate = new Date()
+					rtn.data.backupRestore.status = "SUCCEEDED"
+					def startDate = rtn.data.backupRestore.startDate
+					def endDate = rtn.data.backupRestore.endDate
+					if(startDate && endDate)
+						rtn.data.backupRestore.duration = endDate.time - startDate.time
+
+					rtn.data.updates = true
+				}
+			}
+		}
+		return rtn
 	}
 }

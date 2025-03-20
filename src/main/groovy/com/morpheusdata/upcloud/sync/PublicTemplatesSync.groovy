@@ -44,6 +44,8 @@ class PublicTemplatesSync {
                 SyncTask<VirtualImageIdentityProjection, Map, VirtualImage> syncTask = new SyncTask<>(imageRecords, imageResults.data.storages.storage as Collection<Map>) as SyncTask<VirtualImageIdentityProjection, Map, VirtualImage>
                 syncTask.addMatchFunction { VirtualImageIdentityProjection imageObject, Map cloudItem ->
                     imageObject.externalId == cloudItem?.uuid
+                    log.info("morpheusItem.externalId: ${imageObject.externalId}")
+                    log.info("cloudItem.uuid: ${cloudItem.uuid}")
                 }.withLoadObjectDetailsFromFinder { List<SyncTask.UpdateItemDto<VirtualImageIdentityProjection, Map>> updateItems ->
                     morpheusContext.async.virtualImage.listById(updateItems.collect { it.existingItem.id } as List<Long>)
                 }.onAdd { itemsToAdd ->

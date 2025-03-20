@@ -45,7 +45,12 @@ class UpcloudPlugin extends Plugin {
      */
     @Override
     void onDestroy() {
-        //nothing to do for now
+        List<String> seedsToRun = [
+                "application.UpCloudZoneTypeSeed",
+                "application.ProvisionTypeUpcloudSeed",
+        ]
+        this.morpheus.services.seed.reinstallSeedData(seedsToRun)
+        // needs to be synchronous to prevent seeds from running during plugin install
     }
 
     Map getAuthConfig(Map args) {

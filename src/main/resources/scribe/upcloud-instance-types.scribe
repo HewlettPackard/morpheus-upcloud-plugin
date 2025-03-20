@@ -1,0 +1,178 @@
+resource "option-type" "workloadType-upcloud-image" {
+  code         = "workloadType.upcloud.imageId"
+  type         = "select"
+  name         = "imageType"
+  category     = "workloadType.upcloud"
+  fieldName    = "imageId"
+  optionSource = "upcloudImage"
+  optionSourceType = "upcloud"
+  fieldCode    = "gomorpheus.optiontype.Image"
+  fieldLabel   = "Image"
+  fieldContext = "config"
+  fieldGroup   = "Options"
+  required     = false
+  enabled      = true
+  editable     = false
+  global       = false
+  placeHolder  = null
+  helpBlock    = ""
+  defaultValue = null
+  custom       = false
+  displayOrder = 3
+  fieldClass   = null
+}
+
+resource "virtual-image" "upcloud-image-morpheus-ubuntu-14_04" {
+    code                = "upcloud.image.morpheus.ubuntu.14.04"
+    category            = "upcloud.image.morpheus"
+    sshUsername         = "root"
+    sshPassword         = null
+    name                = "morpheus ubuntu 14.04"
+    imageType           = "qcow2"
+    systemImage         = true
+    installAgent        = true
+    computeServerImage  = true
+    isCloudInit         = false
+    externalId          = "01000000-0000-4000-8000-000030040200"
+    osType              = {code = "ubuntu.14.04.64"}
+}
+
+resource "virtual-image" "upcloud-image-morpheus-ubuntu-18_04" {
+    code                = "upcloud.image.morpheus.ubuntu.18.04"
+    category            = "upcloud.image.morpheus"
+    sshUsername         = "root"
+    sshPassword         = null
+    name                = "morpheus ubuntu 18.04"
+    imageType           = "qcow2"
+    systemImage         = true
+    installAgent        = true
+    computeServerImage  = true
+    isCloudInit         = false
+    externalId          = "01000000-0000-4000-8000-000030080200"
+    osType              = {code = "ubuntu.18.04.64"}
+}
+
+resource "virtual-image" "upcloud-image-morpheus-ubuntu-20_04" {
+    code                = "upcloud.image.morpheus.ubuntu.20.04"
+    category            = "upcloud.image.morpheus"
+    sshUsername         = "root"
+    sshPassword         = null
+    name                = "morpheus ubuntu 20.04"
+    imageType           = "qcow2"
+    systemImage         = true
+    installAgent        = true
+    computeServerImage  = true
+    isCloudInit         = false
+    externalId          = "01000000-0000-4000-8000-000030200200"
+    osType              = {code = "ubuntu.20.04.64"}
+}
+
+resource "virtual-image" "upcloud-image-morpheus-centos-7_3" {
+    code                = "upcloud.image.morpheus.centos.7.3"
+    category            = "upcloud.image.morpheus"
+    sshUsername         = "root"
+    sshPassword         = null
+    name                = "Morpheus CentOS 7.3"
+    imageType           = "qcow2"
+    systemImage         = true
+    installAgent        = true
+    computeServerImage  = true
+    isCloudInit         = false
+    externalId          = "01000000-0000-4000-8000-000050010300"
+    osType              = {code = "cent.7.64"}
+}
+
+resource "virtual-image" "upcloud-image-morpheus-centos-7_5" {
+    code                = "upcloud.image.morpheus.centos.7.5"
+    category            = "upcloud.image.morpheus"
+    sshUsername         = "root"
+    sshPassword         = null
+    name                = "Morpheus CentOS 7.5"
+    imageType           = "qcow2"
+    systemImage         = true
+    installAgent        = true
+    computeServerImage  = true
+    isCloudInit         = false
+    externalId          = "01000000-0000-4000-8000-000050010300"
+    osType              = {code = "cent.7.64"}
+}
+
+resource "instance-type" "upcloud" {
+  code                    = "upcloud"
+  name                    = "UpCloud"
+  category                = "cloud"
+  active                  = true
+  enabled                 = true
+  viewSet                 = "upcloud"
+  stackTier               = 30
+  hasConfig               = false
+  hasSettings             = false
+  hasDeployment           = false
+  versions = ["1.0"]
+  hasAutoScale            = true
+  provisionService        = "upCloudContainerService"
+  provisionTypeDefault    = true
+  environmentPrefix       = "UPCLOUD"
+  provisionSelectType     = "zone"
+  provisionType           = "upcloud"
+  backupType              = "upCloudSnapshot"
+  optionTypes             = [
+    option-type.workloadType-upcloud-template,
+    "instanceType.exposePorts"
+  ]
+}
+
+resource "workload-type" "upcloud-1_0" {
+  code             = "upcloud-1.0"
+  shortName        = "upcloud"
+  name             = "UpCloud VM"
+  ports = []
+  containerVersion = "1.0"
+  repositoryImage  = ""
+  entryPoint       = ""
+  category         = "upcloud"
+  statTypeCode     = "vm"
+  logTypeCode      = "upcloud"
+  checkTypeCode    = "containerCheck"
+  serverType       = "vm"
+  mountPoint       = "/data"
+  provisionType    = "upcloud"
+  commEnabled      = true
+  commType         = "SSH"
+  commPort         = 22
+  backupType       = "upCloudSnapshot"
+  actions = [{code = "generic-remove-node"}]
+}
+
+resource "workload-type-set" "upcloud-1_0-set" {
+  code           = "upcloud-1.0-set"
+  workloadType   = workload-type.upcloud-1_0
+  priorityOrder  = 0
+  dynamicCount   = true
+  containerCount = 1
+}
+
+resource "instance-type-layout" "upcloud-1_0-single" {
+  code            = "upcloud-1.0-single"
+  name            = "UpCloud VM"
+  sortOrder       = 0
+  instanceVersion = "1.0"
+  description     = "This will provision a single process with no redundancy"
+  instanceType    = instance-type.upcloud
+  serverCount     = 1
+  portCount       = 1
+  enabled         = true
+  creatable       = true
+  workloads       = workload-type-set.upcloud-1_0-set
+  actions         = [{code = "generic-add-node"}]
+  optionTypes     = []
+  provisionType   = "upcloud"
+}
+
+resource "scale-action" "upcloud-1_0-single" {
+  code       = "upcloud-1.0-single"
+  scaleType  = "action"
+  layout     = "upcloud-1.0-single"
+  upAction   = {code = "generic-add-node"}
+  downAction = {code = "generic-remove-node"}
+}

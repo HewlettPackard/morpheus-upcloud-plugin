@@ -23,6 +23,7 @@ class UpcloudComputeUtility {
     static requestTimeout = 300000 //5 minutes?
 
     static getServerDetail(Map authConfig, String serverId) {
+        log.info("in get server detail")
         def rtn = [success:false]
         try {
             def callOpts = [:]
