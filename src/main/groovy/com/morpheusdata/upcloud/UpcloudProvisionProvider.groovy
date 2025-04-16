@@ -547,6 +547,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				if(statusResult.success == true) {
 					def removeResults = UpcloudApiService.removeServer(authConfig, server.externalId)
 					if(removeResults.success == true) {
+						server.volumes?.each { volume ->
+							if(volume.externalId) {
+								def volumeResults = UpcloudApiService.removeStorage(authConfig, volume.externalId)
+							}
+						}
 						return ServiceResponse.success()
 					} else {
 						return ServiceResponse.error('Failed to remove vm')
