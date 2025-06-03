@@ -719,6 +719,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		return rtn
 	}
 
+	@Override
+	Boolean supportsCustomServicePlans() {
+		return false
+	}
+
 	protected insertVm(Map runConfig, ProvisionResponse provisionResponse, Map opts) {
 		log.debug("insertVm runConfig: {}", runConfig)
 		def taskResults = [success:false]
