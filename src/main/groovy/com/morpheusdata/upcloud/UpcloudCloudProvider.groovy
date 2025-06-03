@@ -88,17 +88,19 @@ class UpcloudCloudProvider implements CloudProvider {
 	Collection<OptionType> getOptionTypes() {
 		Collection<OptionType> options = [
 			new OptionType(code:'zoneType.upcloud.credential', inputType: OptionType.InputType.CREDENTIAL, name:'Credentials', category:'zoneType.upcloud',
-				fieldName:'type', fieldCode:'gomorpheus.label.credentials', fieldLabel:'Credentials', fieldContext:'credential', fieldSet:'', fieldGroup:'Connection Options', required:true, enabled:true, editable:true, global:false,
+				fieldName:'type', fieldCode:'gomorpheus.label.credentials', fieldLabel:'Credentials', fieldContext:'credential', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:true, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:'local', custom:false, displayOrder:1, fieldClass:null, optionSource:'credentials', config: JsonOutput.toJson(credentialTypes:['username-password']).toString()),
 			new OptionType(code:'zoneType.upcloud.username', inputType:OptionType.InputType.TEXT, name:'Username', category:'zoneType.upcloud',
-				fieldName:'username', fieldCode: 'gomorpheus.optiontype.Username', fieldLabel:'Username', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Options', required:true, enabled:true, editable:false, global:false,
+				fieldName:'username', fieldCode: 'gomorpheus.optiontype.Username', fieldLabel:'Username', fieldContext:'config', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:false, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:2, fieldClass:null, localCredential:true),
 			new OptionType(code:'zoneType.upcloud.password', inputType:OptionType.InputType.PASSWORD, name:'Password', category:'zoneType.upcloud',
-				fieldName:'password', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Options', required:true, enabled:true, editable:false, global:false,
+				fieldName:'password', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'config', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:false, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:3, fieldClass:null, localCredential:true),
 			new OptionType(code:'zoneType.upcloud.zone', inputType:OptionType.InputType.SELECT, name:'Zone', category:'zoneType.upcloud',
-				fieldName:'zone', fieldCode: 'gomorpheus.optiontype.Zone', fieldLabel:'Zone', fieldContext:'config', fieldSet:'', fieldGroup:'Connection Options', required:true, enabled:true, editable:false, global:false,
-				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:4, fieldClass:null, optionSourceType: null, optionSource: 'upcloud.upcloudCloudDataset', dependsOn: 'config.username, credential.type, credential.username, credential.password')
+				fieldName:'zone', fieldCode: 'gomorpheus.optiontype.Zone', fieldLabel:'Zone', fieldContext:'config', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:false, global:false,
+				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:4, fieldClass:null, optionSourceType: null, optionSource: 'upcloud.upcloudCloudDataset', dependsOn: 'config.username, credential.type, credential.username, credential.password'),
+			new OptionType(name: 'Inventory', code: 'upcloud-plugin-inventory-level', displayOrder:5, fieldContext: 'domain', fieldLabel: 'Inventory', fieldCode: 'gomorpheus.label.inventory',	fieldName: 'inventoryLevel',
+				inputType: OptionType.InputType.SELECT,	optionSource:'upcloudPluginInventoryLevels', defaultValue: 'off')
 		]
 
 		return options
