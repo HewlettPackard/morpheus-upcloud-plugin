@@ -95,7 +95,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	@Override
 	Icon getCircularIcon() {
 		// TODO: change icon paths to correct filenames once added to your project
-		return new Icon(path:'provision-circular.svg', darkPath:'provision-circular-dark.svg')
+		return new Icon(path:'upcloud-circular.svg', darkPath:'upcloud-circular.svg')
 	}
 
 	/**
