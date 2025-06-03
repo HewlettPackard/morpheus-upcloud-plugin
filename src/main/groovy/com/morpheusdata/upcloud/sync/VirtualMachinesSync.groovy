@@ -40,6 +40,7 @@ class VirtualMachinesSync {
 
     def execute() {
         try {
+            def inventoryLevel = cloud.inventoryLevel ?: (cloud.getConfigProperty('importExisting') in [true, 'true', 'on'] ? 'basic' : 'off')
             def authConfig = plugin.getAuthConfig(cloud)
             def apiResults = UpcloudApiService.listServers(authConfig)
             log.debug("apiResults: ${apiResults}")
@@ -61,7 +62,9 @@ class VirtualMachinesSync {
                 }.withLoadObjectDetailsFromFinder { List<SyncTask.UpdateItemDto<ComputeServerIdentityProjection, Map>> updateItems ->
                     morpheusContext.async.computeServer.listById(updateItems.collect { it.existingItem.id } as List<Long>)
                 }.onAdd { itemsToAdd ->
-                    addMissingVirtualMachines(itemsToAdd, servicePlans)
+                    if(inventoryLevel in ['basic', 'full']) {
+                        addMissingVirtualMachines(itemsToAdd, servicePlans)
+                    }
                 }.onUpdate { List<SyncTask.UpdateItem<ComputeServer, Map>> updateItems ->
                     updateMatchedVirtualMachines(updateItems)
                 }.onDelete { removeItems ->

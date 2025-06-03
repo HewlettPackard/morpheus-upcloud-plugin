@@ -36,6 +36,7 @@ class UpcloudPlugin extends Plugin {
         this.registerProvider(new UpcloudCloudProvider(this,this.morpheus))
         this.registerProvider(new UpcloudProvisionProvider(this,this.morpheus))
         this.registerProvider(new UpcloudBackupProvider(this,this.morpheus))
+        this.registerProvider(new UpcloudOptionSourceProvider(this, this.morpheus))
         this.registerProvider(new UpcloudImageDatasetProvider(this, this.morpheus))
         this.registerProvider(new UpcloudCloudRegionDatasetProvider(this, this.morpheus))
     }
