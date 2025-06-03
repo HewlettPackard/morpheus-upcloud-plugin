@@ -701,7 +701,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	String getName() {
-		return 'Upcloud Provisioning'
+		return 'UpCloud'
 	}
 
 	@Override
