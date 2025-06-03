@@ -51,7 +51,7 @@ class UpcloudCloudRegionDatasetProvider extends AbstractDatasetProvider<CloudReg
         Map authConfig = plugin.getAuthConfig(query.parameters)
         ServiceResponse apiResults = upcloudApiService.listZones(authConfig)
         if(apiResults.success) {
-            return Observable.fromIterable((List<CloudRegion>)apiResults.data.zones.zone)
+            return Observable.fromIterable(((List<CloudRegion>)apiResults.data.zones.zone).sort{it.description})
         }
         return Observable.empty()
     }
