@@ -95,7 +95,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	@Override
 	Icon getCircularIcon() {
 		// TODO: change icon paths to correct filenames once added to your project
-		return new Icon(path:'provision-circular.svg', darkPath:'provision-circular-dark.svg')
+		return new Icon(path:'upcloud-circular.svg', darkPath:'upcloud-circular.svg')
 	}
 
 	/**
@@ -701,7 +701,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	 */
 	@Override
 	String getName() {
-		return 'Upcloud Provisioning'
+		return 'UpCloud'
 	}
 
 	@Override
@@ -717,6 +717,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				rtn = rtn.substring(lastSlash + 1)
 		}
 		return rtn
+	}
+
+	@Override
+	Boolean supportsCustomServicePlans() {
+		return false
 	}
 
 	protected insertVm(Map runConfig, ProvisionResponse provisionResponse, Map opts) {

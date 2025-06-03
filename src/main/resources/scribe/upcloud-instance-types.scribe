@@ -190,6 +190,10 @@ resource "instance-type" "upcloud" {
     option-type.workloadType-upcloud-template,
     "instanceType.exposePorts"
   ]
+  pluginIconPath          = "upcloud.svg"
+  pluginIconDarkPath      = "upcloud.svg"
+  pluginIconHidpiPath     = "upcloud.svg"
+  pluginIconDarkHidpiPath = "upcloud.svg"
 }
 
 resource "workload-type" "upcloud-1_0" {

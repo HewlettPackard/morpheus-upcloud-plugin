@@ -65,8 +65,7 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Icon getIcon() {
-		// TODO: change icon paths to correct filenames once added to your project
-		return new Icon(path:'cloud.svg', darkPath:'cloud-dark.svg')
+		return new Icon(path:'upcloud.svg', darkPath:'upcloud.svg')
 	}
 
 	/**
@@ -76,8 +75,7 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	Icon getCircularIcon() {
-		// TODO: change icon paths to correct filenames once added to your project
-		return new Icon(path:'cloud-circular.svg', darkPath:'cloud-circular-dark.svg')
+		return new Icon(path:'upcloud-circular.svg', darkPath:'upcloud-circular.svg')
 	}
 
 	/**
