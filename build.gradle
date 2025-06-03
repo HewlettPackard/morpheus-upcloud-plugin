@@ -83,9 +83,9 @@ jar {
 				'Morpheus-Name': 'Upcloud Plugin',
 				'Morpheus-Organization': 'morpheus',
 				'Morpheus-Code': 'upcloud',
-				'Morpheus-Description': 'TODO: Fill in the Plugin Description',
-				'Morpheus-Logo': 'assets/morpheus.svg',
-				'Morpheus-Logo-Dark': 'assets/morpheus.svg',
+				'Morpheus-Description': 'Plugin for UpCloud',
+				'Morpheus-Logo': 'assets/upcloud.svg',
+				'Morpheus-Logo-Dark': 'assets/upcloud.svg',
 				'Morpheus-Labels': 'Plugin, Cloud',
 				'Morpheus-Repo': 'https://github.com/gomorpheus/morpheus-upcloud-plugin',
 				'Morpheus-Min-Appliance-Version': "7.0.4"
