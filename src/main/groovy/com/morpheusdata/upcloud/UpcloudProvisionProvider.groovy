@@ -724,6 +724,21 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		return false
 	}
 
+	@Override
+	Boolean lvmSupported() {
+		return true
+	}
+
+	@Override
+	Boolean canCustomizeRootVolume() {
+		return true
+	}
+
+	@Override
+	String getHostDiskMode() {
+		return 'lvm'
+	}
+
 	protected insertVm(Map runConfig, ProvisionResponse provisionResponse, Map opts) {
 		log.debug("insertVm runConfig: {}", runConfig)
 		def taskResults = [success:false]
