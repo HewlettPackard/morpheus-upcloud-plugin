@@ -932,7 +932,9 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				def interfaceName = server.sourceImage?.interfaceName ?: 'eth0'
 				network = new ComputeServerInterface(name:interfaceName, ipAddress:privateIp, primaryInterface:true,
 						displayOrder:(server.interfaces?.size() ?: 0) + 1, externalId: networkOpts.externalId)
-				network.addresses += new NetAddress(type: NetAddress.AddressType.IPV4, address: privateIp)
+				if(network.addresses && !(privateIp in network.addresses.address)) {
+					network.addresses += new NetAddress(type: NetAddress.AddressType.IPV4, address: privateIp)
+				}
 				newInterface = true
 			} else {
 				network.ipAddress = privateIp
