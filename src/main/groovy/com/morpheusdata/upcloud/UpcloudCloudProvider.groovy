@@ -98,7 +98,7 @@ class UpcloudCloudProvider implements CloudProvider {
 				fieldName:'zone', fieldCode: 'gomorpheus.optiontype.Zone', fieldLabel:'Zone', fieldContext:'config', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:false, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:4, fieldClass:null, optionSourceType: null, optionSource: 'upcloud.upcloudCloudDataset', dependsOn: 'config.username, credential.type, credential.username, credential.password'),
 			new OptionType(name: 'Inventory', code: 'upcloud-plugin-inventory-level', displayOrder:5, fieldContext: 'domain', fieldLabel: 'Inventory', fieldCode: 'gomorpheus.label.inventory',	fieldName: 'inventoryLevel',
-				inputType: OptionType.InputType.SELECT,	optionSource:'upcloudPluginInventoryLevels', defaultValue: 'off')
+				inputType: OptionType.InputType.SELECT,	optionSource:'upcloudPluginInventoryLevels', defaultValue: 'off', noSelection: 'Off')
 		]
 
 		return options
