@@ -80,7 +80,7 @@ jar {
 		attributes(
 				'Plugin-Class': 'com.morpheusdata.upcloud.UpcloudPlugin',
 				'Plugin-Version': version,
-				'Morpheus-Name': 'Upcloud Plugin',
+				'Morpheus-Name': 'UpCloud Plugin',
 				'Morpheus-Organization': 'morpheus',
 				'Morpheus-Code': 'upcloud',
 				'Morpheus-Description': 'Plugin for UpCloud',
