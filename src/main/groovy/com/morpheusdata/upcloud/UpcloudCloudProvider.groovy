@@ -281,7 +281,7 @@ class UpcloudCloudProvider implements CloudProvider {
 				} else if(password?.length() < 1) {
 					return new ServiceResponse(success: false, msg: 'Enter a password')
 				} else {
-					def authConfig = plugin.getAuthConfig(cloudInfo)
+					def authConfig = [username: username, password: password, apiUrl: UpcloudApiService.upCloudEndpoint]
 					def zoneList = UpcloudApiService.listZones(authConfig)
 					if(zoneList.success == true) {
 						return ServiceResponse.success()
