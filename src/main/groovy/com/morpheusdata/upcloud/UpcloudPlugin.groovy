@@ -32,7 +32,7 @@ class UpcloudPlugin extends Plugin {
 
     @Override
     void initialize() {
-        this.setName("Upcloud")
+        this.setName("UpCloud")
         this.registerProvider(new UpcloudCloudProvider(this,this.morpheus))
         this.registerProvider(new UpcloudProvisionProvider(this,this.morpheus))
         this.registerProvider(new UpcloudBackupProvider(this,this.morpheus))

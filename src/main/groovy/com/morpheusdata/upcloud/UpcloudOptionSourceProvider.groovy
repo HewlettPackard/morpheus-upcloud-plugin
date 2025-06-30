@@ -32,7 +32,7 @@ class UpcloudOptionSourceProvider extends AbstractOptionSourceProvider{
 
     @Override
     String getName() {
-        return 'Upcloud Option Source'
+        return 'UpCloud Option Source'
     }
 
     @Override
