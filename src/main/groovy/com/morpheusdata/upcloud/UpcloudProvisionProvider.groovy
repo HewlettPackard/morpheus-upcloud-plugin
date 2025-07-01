@@ -423,6 +423,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 							opts.installAgent = opts.noAgent ? false : runConfig.virtualImage.installAgent
 							provisionResponse.noAgent = runConfig.noAgent
 							provisionResponse.installAgent = runConfig.installAgent
+							provisionResponse.createUsers = runConfig.userConfig.createUsers
 
 							runVirtualMachine(runConfig, provisionResponse, opts)
 						} else {
@@ -746,7 +747,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		def instance = morpheus.async.instance.get(runConfig.instanceId).blockingGet()
 
 		opts.createUserList = runConfig.userConfig.createUsers
-
+		provisionResponse.createUsers = runConfig.userConfig.createUsers
 		//save server
 		// runConfig.server = saveAndGet(server)
 		log.debug("create server: ${runConfig}")
@@ -907,7 +908,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		}
 	}
 
-	private applyComputeServerNetwork(server, privateIp, publicIp = null, hostname = null, networkPoolId = null, configOpts = [:], index = 0, networkOpts = [:]) {
+	private applyComputeServerNetwork(ComputeServer server, privateIp, publicIp = null, hostname = null, networkPoolId = null, configOpts = [:], index = 0, networkOpts = [:]) {
 		configOpts.each { k,v ->
 			server.setConfigProperty(k, v)
 		}
@@ -956,10 +957,13 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				}
 			}
 
-			if(newInterface == true)
-				context.async.computeServer.computeServerInterface.create([network], server).blockingGet()
-			else
-				context.async.computeServer.computeServerInterface.save([network]).blockingGet()
+			if (newInterface == true) {
+				def tempNetwork = context.services.computeServer.computeServerInterface.create(network)
+				server.interfaces.add(tempNetwork)
+				//context.async.computeServer.computeServerInterface.create([network], server).blockingGet()
+			} else {
+				context.services.computeServer.computeServerInterface.save(network)
+			}
 		}
 		saveAndGet(server)
 		return network
@@ -1164,6 +1168,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					createOpts.userData = cloudConfigUser
 				}
 
+				provisionResponse.createUsers = opts.userConfig.createUsers
 				context.async.computeServer.save(server).blockingGet()
 				//create it
 				log.debug("create server: ${createOpts}")
