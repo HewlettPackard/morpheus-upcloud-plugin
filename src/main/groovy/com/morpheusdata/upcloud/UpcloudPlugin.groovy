@@ -93,22 +93,6 @@ class UpcloudPlugin extends Plugin {
     def getAuthConfig(Cloud cloud) {
         def rtn = [:]
 
-//        if(!cloud.accountCredentialLoaded) {
-//            AccountCredential accountCredential
-//            try {
-//                if(!cloud.account?.id || !cloud.owner?.id) {
-//                    log.debug("cloud account or owner id is missing, loading cloud object")
-//                    cloud = morpheus.services.cloud.get(cloud.id)
-//                }
-//                accountCredential = morpheus.services.accountCredential.loadCredentials(cloud)
-//            } catch(e) {
-//                // If there is no credential on the cloud, then this will error
-//                log.error("No credential on cloud")
-//            }
-//            cloud.accountCredentialLoaded = true
-//            cloud.accountCredentialData = accountCredential?.data
-//        }
-
         try {
             log.debug("cloud.account.id: ${cloud.account?.id}")
             log.debug("cloud.owner.id: ${cloud.owner?.id}")
@@ -136,14 +120,14 @@ class UpcloudPlugin extends Plugin {
         if(cloud.accountCredentialData && cloud.accountCredentialData.containsKey('username')) {
             username = cloud.accountCredentialData['username']
         } else {
-            username = cloud.configMap.username
+            username = cloud.configMap.username ?: cloud.serviceUsername
         }
 
         def password
         if(cloud.accountCredentialData && cloud.accountCredentialData.containsKey('password')) {
             password = cloud.accountCredentialData['password']
         } else {
-            password = cloud.configMap.password
+            password = cloud.configMap.password ?: cloud.servicePassword
         }
 
         rtn.username = username
