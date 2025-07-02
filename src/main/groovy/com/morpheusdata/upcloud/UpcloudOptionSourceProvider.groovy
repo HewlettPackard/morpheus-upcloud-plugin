@@ -42,7 +42,6 @@ class UpcloudOptionSourceProvider extends AbstractOptionSourceProvider{
 
     def upcloudPluginInventoryLevels(args) {
         [
-            [name:'Off', value:'off'],
             [name:'Basic', value:'basic'],
             [name:'Full', value:'full']
         ]
