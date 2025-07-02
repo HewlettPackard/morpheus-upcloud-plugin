@@ -17,10 +17,10 @@ import io.reactivex.rxjava3.core.Observable
 @Slf4j
 class UpcloudCloudRegionDatasetProvider extends AbstractDatasetProvider<CloudRegion, Long>{
 
-    public static final providerName = 'Upcloud Cloud Dataset Provider'
+    public static final providerName = 'UpCloud Cloud Dataset Provider'
     public static final providerNamespace = 'upcloud'
     public static final providerKey = 'upcloudCloudDataset'
-    public static final providerDescription = 'Get clouds from Upcloud'
+    public static final providerDescription = 'Get clouds from UpCloud'
 
     UpcloudApiService upcloudApiService
     MorpheusContext morpheusContext

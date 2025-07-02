@@ -601,6 +601,6 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	String getName() {
-		return 'Upcloud'
+		return 'UpCloud'
 	}
 }

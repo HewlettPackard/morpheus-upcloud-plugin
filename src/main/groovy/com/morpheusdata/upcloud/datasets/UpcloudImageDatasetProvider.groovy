@@ -15,10 +15,10 @@ import io.reactivex.rxjava3.core.Observable
 
 class UpcloudImageDatasetProvider extends AbstractDatasetProvider<VirtualImage, Long>{
 
-    public static final providerName = 'Upcloud Image Dataset Provider'
+    public static final providerName = 'UpCloud Image Dataset Provider'
     public static final providerNamespace = 'upcloud'
     public static final providerKey = 'upcloudImageDataset'
-    public static final providerDescription = 'Get images from Upcloud'
+    public static final providerDescription = 'Get images from UpCloud'
 
 
     UpcloudImageDatasetProvider(Plugin plugin, MorpheusContext morpheus) {
