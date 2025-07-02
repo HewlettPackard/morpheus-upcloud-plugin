@@ -22,6 +22,8 @@ import com.morpheusdata.model.Instance
 import com.morpheusdata.model.NetAddress
 import com.morpheusdata.model.NetworkProxy
 import com.morpheusdata.model.OptionType
+import com.morpheusdata.model.ProcessEvent
+import com.morpheusdata.model.ProcessStepType
 import com.morpheusdata.model.ProxyConfiguration
 import com.morpheusdata.model.ServicePlan
 import com.morpheusdata.model.StorageVolume
@@ -430,7 +432,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 							provisionResponse.installAgent = runConfig.installAgent
 							provisionResponse.createUsers = runConfig.userConfig.createUsers
 
-							runVirtualMachine(runConfig, provisionResponse, opts)
+							runVirtualMachine(runConfig, provisionResponse, workloadRequest, opts)
 						} else {
 							provisionResponse.setError(imageUploadResults.message)
 							return new ServiceResponse(success: false, msg: imageUploadResults.message, e: null, data: provisionResponse)
@@ -745,12 +747,12 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		return 'lvm'
 	}
 
-	protected insertVm(Map runConfig, ProvisionResponse provisionResponse, Map opts) {
+	protected insertVm(Map runConfig, ProvisionResponse provisionResponse, workloadRequest, Map opts) {
 		log.debug("insertVm runConfig: {}", runConfig)
 		def taskResults = [success:false]
 		def server = runConfig.server
 		def instance = morpheus.async.instance.get(runConfig.instanceId).blockingGet()
-
+		context.services.process.startProcessStep(workloadRequest.process, new ProcessEvent(stepType: ProcessStepType.PROVISION_CONFIG), "")
 		opts.createUserList = runConfig.userConfig.createUsers
 		provisionResponse.createUsers = runConfig.userConfig.createUsers
 		//save server
@@ -759,7 +761,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 		//set install agent
 		runConfig.installAgent = runConfig.noAgent && server.cloud.agentMode != 'cloudInit'
-
+		context.services.process.startProcessStep(workloadRequest.process, new ProcessEvent(stepType: ProcessStepType.PROVISION_DEPLOY), "")
 		def createResults = UpcloudApiService.createServer(runConfig.authConfig, runConfig)
 		log.debug("Upcloud Create Server Results: {}",createResults)
 		if(createResults.success == true && createResults.server) {
@@ -769,6 +771,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			provisionResponse.externalId = server.externalId
 			server = saveAndGet(server)
 			runConfig.server = server
+			context.services.process.startProcessStep(workloadRequest.process, new ProcessEvent(stepType: ProcessStepType.PROVISION_LAUNCH), "")
 
 			UpcloudApiService.waitForServerExists(runConfig.authConfig, createResults.externalId)
 			// wait for ready
@@ -1064,11 +1067,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 //		return runConfig
 //	}
 
-	private void runVirtualMachine(Map runConfig, ProvisionResponse provisionResponse, Map opts) {
+	private void runVirtualMachine(Map runConfig, ProvisionResponse provisionResponse, workloadRequest, opts) {
 		try {
 			// don't think this used
 			// runConfig.template = runConfig.imageId
-			def runResults = insertVm(runConfig, provisionResponse, opts)
+			def runResults = insertVm(runConfig, provisionResponse, workloadRequest, opts)
 			if(provisionResponse.success) {
 				finalizeVm(runConfig, provisionResponse, runResults)
 			}
@@ -1179,7 +1182,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				context.async.computeServer.save(server).blockingGet()
 				//create it
 				log.debug("create server: ${createOpts}")
-				runVirtualMachine(createOpts, provisionResponse, opts)
+				runVirtualMachine(createOpts, provisionResponse, hostRequest, opts)
 			} else {
 				server.statusMessage = 'Image not found'
 			}
