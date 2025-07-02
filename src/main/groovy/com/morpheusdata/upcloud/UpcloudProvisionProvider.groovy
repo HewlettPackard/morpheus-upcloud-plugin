@@ -268,6 +268,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		return HostType.vm
 	}
 
+	@Override
+	String getNodeFormat() {
+		return 'vm'
+	}
+
 	def buildDataDisk(volume) {
 		return [id:volume.id, diskType:volume?.type?.code ?: 'upcloudVolume', maxStorage:volume.maxStorage, name:volume.name,
 				deviceName:volume.deviceName, displayOrder:volume.displayOrder]
