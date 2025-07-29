@@ -371,7 +371,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 						timezone: (server.getConfigProperty('timezone') ?: cloud.timezone),
 						zoneRef: cloudConfig.zone,
 						hostname: server.getExternalHostname(),
-						userData: null,
+						userData: workloadRequest.cloudConfigUser,
 						externalId: server.externalId,
 						serverId: server.id,
 						virtualImage: virtualImage,
