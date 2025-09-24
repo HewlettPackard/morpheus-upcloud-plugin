@@ -254,6 +254,7 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse validate(Cloud cloudInfo, ValidateCloudRequest validateCloudRequest) {
+		log.info("validating cloud info: ${cloudInfo.dump()} with request: ${validateCloudRequest.dump()}")
 		try {
 			if(cloudInfo) {
 				def username
@@ -283,6 +284,7 @@ class UpcloudCloudProvider implements CloudProvider {
 				} else {
 					def authConfig = [username: username, password: password, apiUrl: UpcloudApiService.upCloudEndpoint]
 					HttpApiClient client = new HttpApiClient()
+					client.networkProxy = cloudInfo.apiProxy
 					def zoneList = UpcloudApiService.listZones(client, authConfig)
 					if(zoneList.success == true) {
 						return ServiceResponse.success()

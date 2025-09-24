@@ -115,6 +115,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 					def server = morpheus.async.computeServer.get(workload.serverId).blockingGet()
 					def cloud = morpheus.async.cloud.get(server.cloud.id).blockingGet()
 					HttpApiClient client = new HttpApiClient()
+					client.networkProxy = cloud.apiProxy
 					//auth config
 					def authConfig = plugin.getAuthConfig(cloud)
 					//delete
@@ -178,7 +179,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 		HttpApiClient client = new HttpApiClient()
 		try {
 			log.debug("backupConfig container: {}", rtn.data)
-
+			client.networkProxy = cloud.apiProxy
 			Workload workload = morpheus.services.workload.get(rtn.data.backupResult.containerId)
 			Instance instance = morpheus.services.instance.get(workload.instance.id)
 			def snapshotName = "${instance.name}.${workload.id}.${System.currentTimeMillis()}".toString()
@@ -274,6 +275,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 				def server = morpheus.services.computeServer.get(workload.server.id)
 				def cloud = morpheus.services.cloud.get(server.cloud.id)
 				HttpApiClient client = new HttpApiClient()
+				client.networkProxy = cloud.apiProxy
 				//auth config
 				def authConfig = plugin.getAuthConfig(cloud)
 				def statusResults = []

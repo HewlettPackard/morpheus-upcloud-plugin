@@ -129,6 +129,7 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 				def server = morpheus.async.computeServer.get(workload.serverId).blockingGet()
 				def cloud = morpheus.async.cloud.get(server.cloud.id).blockingGet()
 				HttpApiClient client = new HttpApiClient()
+				client.networkProxy = cloud.apiProxy
 				//auth config
 				def authConfig = plugin.getAuthConfig(cloud)
 				//stop the server
@@ -193,6 +194,7 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 
 			if(server) {
 				HttpApiClient client = new HttpApiClient()
+				client.networkProxy = server.cloud.apiProxy
 				//get status of server
 				def authConfig = plugin.getAuthConfig(server.cloud)
 				def serverDetail = UpcloudApiService.getServerDetail(client, authConfig, server.externalId)

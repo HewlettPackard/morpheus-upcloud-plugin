@@ -52,6 +52,10 @@ class UpcloudCloudRegionDatasetProvider extends AbstractDatasetProvider<CloudReg
     Observable<CloudRegion> list(DatasetQuery query) {
         log.info("listing zones: ${query.parameters}, apiProxy: ${query.zone?.apiProxy?.id}")
         Map authConfig = plugin.getAuthConfig(query.parameters)
+        log.info("authConfig in list zones: ${authConfig}")
+        if(authConfig.username == null) {
+            return Observable.empty()
+        }
         HttpApiClient client = new HttpApiClient()
         def apiProxyId = query.zone?.apiProxy?.id
         log.info("apiProxyId: ${apiProxyId}")
