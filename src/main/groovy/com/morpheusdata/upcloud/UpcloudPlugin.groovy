@@ -81,8 +81,13 @@ class UpcloudPlugin extends Plugin {
         } else {
             log.debug("config: $args.config")
             username = args?.config?.username
-            password = args?.config?.password
-            // if contains ********* then load from config.password, load the zone, get the config
+            if(args?.config?.password != '************') {
+                password = args?.config?.password
+            } else {
+                def cloud = morpheus.services.cloud.get(args?.zoneId.toLong())
+                def config = cloud?.configMap
+                password = config?.password
+            }
         }
 
         rtn.username = username
