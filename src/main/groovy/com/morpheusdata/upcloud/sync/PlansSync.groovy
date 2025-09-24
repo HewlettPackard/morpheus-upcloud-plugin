@@ -2,6 +2,7 @@ package com.morpheusdata.upcloud.sync
 
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.data.DataQuery
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.SyncTask
 import com.morpheusdata.model.Account
 import com.morpheusdata.model.Cloud
@@ -23,20 +24,23 @@ import io.reactivex.rxjava3.core.Observable
 
 @Slf4j
 class PlansSync {
+    private HttpApiClient client
     private Cloud cloud
     UpcloudPlugin plugin
     private MorpheusContext morpheusContext
 
-    PlansSync(Cloud cloud, UpcloudPlugin plugin, MorpheusContext morpheusContext) {
+    PlansSync(HttpApiClient client, Cloud cloud, UpcloudPlugin plugin, MorpheusContext morpheusContext) {
+        this.client = client
         this.cloud = cloud
         this.plugin = plugin
         this.morpheusContext = morpheusContext
     }
 
     def execute() {
+        log.info("SYNCING PLANS")
         try {
             def authConfig = plugin.getAuthConfig(cloud)
-            def planListResults = UpcloudApiService.listPlans(authConfig)
+            def planListResults = UpcloudApiService.listPlans(client, authConfig)
             if (planListResults.success == true) {
                 def planList = planListResults?.data?.plans?.plan
                 def upcloudProvisionType = new ProvisionType(code:'upcloud')
@@ -168,7 +172,7 @@ class PlansSync {
         Map<String, ServicePlan> priceSetPrices = [:]
 
         def authConfig = plugin.getAuthConfig(cloud)
-        def priceListResults = UpcloudApiService.listPrices(authConfig)
+        def priceListResults = UpcloudApiService.listPrices(client, authConfig)
         def upcloudProvisionType = new ProvisionType(code:'upcloud')
 
         List<String> servicePlanCodes = servicePlans.collect { it.code }

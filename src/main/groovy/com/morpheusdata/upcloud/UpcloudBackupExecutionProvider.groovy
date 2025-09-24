@@ -6,6 +6,7 @@ import com.morpheusdata.core.backup.BackupExecutionProvider
 import com.morpheusdata.core.backup.response.BackupExecutionResponse
 import com.morpheusdata.core.backup.util.BackupStatusUtility
 import com.morpheusdata.core.util.DateUtility
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.model.Backup
 import com.morpheusdata.model.BackupResult
 import com.morpheusdata.model.Cloud
@@ -113,12 +114,13 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 					def instance = morpheus.async.instance.get(workload.instance.id).blockingGet()
 					def server = morpheus.async.computeServer.get(workload.serverId).blockingGet()
 					def cloud = morpheus.async.cloud.get(server.cloud.id).blockingGet()
+					HttpApiClient client = new HttpApiClient()
 					//auth config
 					def authConfig = plugin.getAuthConfig(cloud)
 					//delete
 					def deleteSuccess = true
 					snapshotList?.each { snapshot ->
-						def deleteResult = UpcloudApiService.removeStorage(authConfig, snapshot.storageId)
+						def deleteResult = UpcloudApiService.removeStorage(client, authConfig, snapshot.storageId)
 						deleteSuccess = deleteSuccess && deleteResult.success
 					}
 					if(!deleteSuccess) {
@@ -173,6 +175,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 	@Override
 	ServiceResponse<BackupExecutionResponse> executeBackup(Backup backup, BackupResult backupResult, Map executionConfig, Cloud cloud, ComputeServer computeServer, Map opts) {
 		ServiceResponse<BackupExecutionResponse> rtn = ServiceResponse.prepare(new BackupExecutionResponse(backupResult))
+		HttpApiClient client = new HttpApiClient()
 		try {
 			log.debug("backupConfig container: {}", rtn.data)
 
@@ -186,7 +189,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 
 			//auth config
 			def authConfig = plugin.getAuthConfig(cloud)
-			def serverStatus = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'started')
+			def serverStatus = UpcloudApiService.waitForServerStatus(client, authConfig, computeServer.externalId, 'started')
 
 			//create the backup for each disk
 			def snapshotResults = []
@@ -194,8 +197,8 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 			computeServer.volumes?.each { StorageVolume volume ->
 				if(volume.externalId) {
 					def snapshotConfig = [snapshotName:snapshotName]
-					def snapShotStartResult = UpcloudApiService.waitForStorageStatus(authConfig, volume.externalId, 'online', [maxAttempts:360, retryInterval:(1000l * 10l)])
-					def snapshotResult = UpcloudApiService.createSnapshot(authConfig, volume.externalId, snapshotConfig)
+					def snapShotStartResult = UpcloudApiService.waitForStorageStatus(client, authConfig, volume.externalId, 'online', [maxAttempts:360, retryInterval:(1000l * 10l)])
+					def snapshotResult = UpcloudApiService.createSnapshot(client, authConfig, volume.externalId, snapshotConfig)
 					if(snapShotStartResult.success == false && !snapshotResult.msg) {
 						snapshotResult.msg = "Storage state invalid."
 					}
@@ -234,7 +237,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 			}
 			if(snapshotSuccess == true && opts.inline) {
 				snapshotResults.each { snapshotResult ->
-					def snapshotStatus = UpcloudApiService.waitForStorageStatus(authConfig, snapshotResult.data?.storage?.uuid, 'online')
+					def snapshotStatus = UpcloudApiService.waitForStorageStatus(client, authConfig, snapshotResult.data?.storage?.uuid, 'online')
 				}
 				refreshBackupResult(rtn.data.backupResult)
 			}
@@ -270,6 +273,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 				def instance = morpheus.services.instance.get(workload.instance.id)
 				def server = morpheus.services.computeServer.get(workload.server.id)
 				def cloud = morpheus.services.cloud.get(server.cloud.id)
+				HttpApiClient client = new HttpApiClient()
 				//auth config
 				def authConfig = plugin.getAuthConfig(cloud)
 				def statusResults = []
@@ -277,7 +281,7 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 				def statusComplete = true
 				def totalSize = 0
 				snapshotList?.each { snapshot ->
-					def statusResult = UpcloudApiService.getStorageDetails(authConfig, snapshot.storageId)
+					def statusResult = UpcloudApiService.getStorageDetails(client, authConfig, snapshot.storageId)
 					statusResults << statusResult
 					statusSuccess = statusResult.success && statusSuccess
 					statusComplete = statusComplete && (statusResult.data?.storage?.state == 'online')

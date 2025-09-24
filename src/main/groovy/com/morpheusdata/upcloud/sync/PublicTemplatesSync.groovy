@@ -2,6 +2,7 @@ package com.morpheusdata.upcloud.sync
 
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.data.DataQuery
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.SyncTask
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.ComputeServer
@@ -20,21 +21,23 @@ import groovy.util.logging.Slf4j
 
 @Slf4j
 class PublicTemplatesSync {
-
+    private HttpApiClient client
     private Cloud cloud
     UpcloudPlugin plugin
     private MorpheusContext morpheusContext
 
-    PublicTemplatesSync(Cloud cloud, UpcloudPlugin plugin, MorpheusContext morpheusContext) {
+    PublicTemplatesSync(HttpApiClient client, Cloud cloud, UpcloudPlugin plugin, MorpheusContext morpheusContext) {
+        this.client = client
         this.cloud = cloud
         this.plugin = plugin
         this.morpheusContext = morpheusContext
     }
 
     def execute() {
+        log.info("SYNCING PUBLIC TEMPLATES")
         try {
             def authConfig = plugin.getAuthConfig(cloud)
-            def imageResults = UpcloudApiService.listPublicTemplates(authConfig)
+            def imageResults = UpcloudApiService.listPublicTemplates(client, authConfig)
             log.debug("imageResults: ${imageResults}")
 
             if (imageResults.success == true) {

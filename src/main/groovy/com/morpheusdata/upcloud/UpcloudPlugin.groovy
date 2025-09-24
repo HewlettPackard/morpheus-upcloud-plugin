@@ -55,6 +55,7 @@ class UpcloudPlugin extends Plugin {
     }
 
     Map getAuthConfig(Map args) {
+        log.debug("getAuthConfig Args: ${args}")
         def rtn = [:]
         def accountCredentialData
         def username
@@ -81,12 +82,13 @@ class UpcloudPlugin extends Plugin {
             log.debug("config: $args.config")
             username = args?.config?.username
             password = args?.config?.password
+            // if contains ********* then load from config.password, load the zone, get the config
         }
 
         rtn.username = username
         rtn.password = password
         rtn.apiUrl = UpcloudApiService.upCloudEndpoint
-        log.debug("getAuthConfig: ${rtn}")
+        log.debug("getAuthConfig: ${rtn.username}, ${rtn.password}")
         return rtn
     }
 

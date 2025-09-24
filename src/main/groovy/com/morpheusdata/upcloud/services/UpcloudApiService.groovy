@@ -26,12 +26,12 @@ class UpcloudApiService {
     static upcloudApiVersion = '1.3'
     static requestTimeout = 300000 //5 minutes?
 
-    static listZones(Map authConfig) {
+    static listZones(HttpApiClient client, Map authConfig) {
         def rtn = [success:false]
         try {
             Map callOpts = [:]
             String callPath = '/zone'
-            def callResults = callApi(authConfig, callPath, callOpts, 'GET')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'GET')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -45,12 +45,12 @@ class UpcloudApiService {
         return ServiceResponse.create(rtn)
     }
 
-    static listPlans(Map authConfig) {
+    static listPlans(HttpApiClient client, Map authConfig) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = '/plan'
-            def callResults = callApi(authConfig, callPath, callOpts, 'GET')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'GET')
             if (callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -64,12 +64,12 @@ class UpcloudApiService {
         return rtn
     }
 
-    static listPrices(Map authConfig) {
+    static listPrices(HttpApiClient client, Map authConfig) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = '/price'
-            def callResults = callApi(authConfig, callPath, callOpts, 'GET')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'GET')
             if (callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -83,12 +83,12 @@ class UpcloudApiService {
         return rtn
     }
 
-    static listPublicTemplates(Map authConfig) {
+    static listPublicTemplates(HttpApiClient client, Map authConfig) {
         def rtn = [success:false, data:[storages:[storage:[]]]]
         try {
             def callOpts = [:]
             def callPath = '/storage/template'
-            def callResults = callApi(authConfig, callPath, callOpts, 'GET')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'GET')
             log.debug("callResults: ${callResults}")
             if (callResults.success == true) {
                 def imageData = callResults.data
@@ -108,12 +108,12 @@ class UpcloudApiService {
         return rtn
     }
 
-    static listUserTemplates(Map authConfig) {
+    static listUserTemplates(HttpApiClient client, Map authConfig) {
         def rtn = [success:false, data:[storages:[storage:[]]]]
         try {
             def callOpts = [:]
             def callPath = '/storage/template'
-            def callResults = callApi(authConfig, callPath, callOpts, 'GET')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'GET')
             if (callResults.success == true) {
                 def imageData = callResults.data
                 imageData?.storages?.storage?.each { image ->
@@ -152,12 +152,12 @@ class UpcloudApiService {
         return rtn
     }*/
 
-    static getStorageDetails(Map authConfig, String storageId) {
+    static getStorageDetails(HttpApiClient client, Map authConfig, String storageId) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = "/storage/${storageId}"
-            def callResults = callApi(authConfig, callPath, callOpts, 'GET')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'GET')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.storage = callResults.data?.storage
@@ -172,12 +172,12 @@ class UpcloudApiService {
         return rtn
     }
 
-    static removeStorage(Map authConfig, String storageId) {
+    static removeStorage(HttpApiClient client, Map authConfig, String storageId) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = "/storage/${storageId}"
-            def callResults = callApi(authConfig, callPath, callOpts, 'DELETE')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'DELETE')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -191,17 +191,17 @@ class UpcloudApiService {
         return rtn
     }
 
-    static getServerDetail(Map authConfig, String serverId) {
+    static getServerDetail(HttpApiClient client, Map authConfig, String serverId) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = "/server/${serverId}"
-            def callResults = callApi(authConfig, callPath, callOpts, 'GET')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'GET')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.server = rtn.data?.server
-                rtn.volumes = getVmVolumes(rtn.data?.server?.'storage_devices'?.'storage_device')
-                rtn.networks = getVmNetworks(rtn.data?.server?.'ip_addresses'?.'ip_address')
+                rtn.volumes = UpcloudComputeUtility.getVmVolumes(rtn.data?.server?.'storage_devices'?.'storage_device')
+                rtn.networks = UpcloudComputeUtility.getVmNetworks(rtn.data?.server?.'ip_addresses'?.'ip_address')
                 rtn.success = true
             } else {
                 rtn.success = false
@@ -214,45 +214,45 @@ class UpcloudApiService {
         return rtn
     }
 
-    static getVmVolumes(storageDevices) {
-        def rtn = []
-        try {
-            storageDevices?.eachWithIndex { storageDevice, index ->
-                if(storageDevice.type == 'disk') {
-                    def newDisk = [address:storageDevice.address, size:storageDevice.'storage_size',
-                                   description:storageDevice.'storage_title', name:storageDevice.'storage_title',
-                                   type:'disk', storageId:storageDevice.storage, index:index, deviceName:storageDevice.address]
-                    rtn << newDisk
-                }
-            }
-        } catch(e) {
-            log.error("getVmVolumes error: ${e}")
-        }
-        return rtn
-    }
+//    static getVmVolumes(storageDevices) {
+//        def rtn = []
+//        try {
+//            storageDevices?.eachWithIndex { storageDevice, index ->
+//                if(storageDevice.type == 'disk') {
+//                    def newDisk = [address:storageDevice.address, size:storageDevice.'storage_size',
+//                                   description:storageDevice.'storage_title', name:storageDevice.'storage_title',
+//                                   type:'disk', storageId:storageDevice.storage, index:index, deviceName:storageDevice.address]
+//                    rtn << newDisk
+//                }
+//            }
+//        } catch(e) {
+//            log.error("getVmVolumes error: ${e}")
+//        }
+//        return rtn
+//    }
+//
+//    static getVmNetworks(networkDevices) {
+//        def rtn = []
+//        try {
+//            def counter = 0
+//            networkDevices?.each { networkDevice ->
+//                def newNic = [access:networkDevice.access, family:networkDevice.family, address:networkDevice.address,
+//                              row:counter]
+//                rtn << newNic
+//                counter++
+//            }
+//        } catch(e) {
+//            log.error("getVmNetworks error: ${e}")
+//        }
+//        return rtn
+//    }
 
-    static getVmNetworks(networkDevices) {
-        def rtn = []
-        try {
-            def counter = 0
-            networkDevices?.each { networkDevice ->
-                def newNic = [access:networkDevice.access, family:networkDevice.family, address:networkDevice.address,
-                              row:counter]
-                rtn << newNic
-                counter++
-            }
-        } catch(e) {
-            log.error("getVmNetworks error: ${e}")
-        }
-        return rtn
-    }
-
-    static listServers(Map authConfig) {
+    static listServers(HttpApiClient client, Map authConfig) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = '/server'
-            def callResults = callApi(authConfig, callPath, callOpts, 'GET')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'GET')
             if (callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -266,7 +266,7 @@ class UpcloudApiService {
         return rtn
     }
 
-    static createServer(Map authConfig, Map serverConfig) {
+    static createServer(HttpApiClient client, Map authConfig, Map serverConfig) {
         log.debug("serverConfig: ${serverConfig}")
         def rtn = [success:false]
         try {
@@ -351,7 +351,7 @@ class UpcloudApiService {
                 callOpts.body.server.user_data = serverConfig.cloudConfig
             //create server
             log.debug("callOpts: ${callOpts}")
-            def callResults = callApi(authConfig, callPath, callOpts, 'POST')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.server = rtn.data?.server
@@ -368,13 +368,13 @@ class UpcloudApiService {
         return rtn
     }
 
-    static waitForServerExists(Map authConfig, String serverId) {
+    static waitForServerExists(HttpApiClient client, Map authConfig, String serverId) {
         def rtn = [success:false]
         try {
             def pending = true
             def attempts = 0
             while(pending) {
-                def serverDetail = getServerDetail(authConfig, serverId)
+                def serverDetail = getServerDetail(client, authConfig, serverId)
                 if(serverDetail.success == true && serverDetail?.server?.state == 'started') {
                     def privateIp = serverDetail.server?.'ip_addresses'?.'ip_address'?.find{ it.access == 'utility' && it.family == 'IPv4' }
                     if(privateIp?.address) {
@@ -400,13 +400,13 @@ class UpcloudApiService {
         return rtn
     }
 
-    static waitForServerStatus(Map authConfig, String serverId, String status) {
+    static waitForServerStatus(HttpApiClient client, Map authConfig, String serverId, String status) {
         def rtn = [success:false]
         try {
             def pending = true
             def attempts = 0
             while(pending) {
-                def serverDetail = getServerDetail(authConfig, serverId)
+                def serverDetail = getServerDetail(client, authConfig, serverId)
                 log.debug("serverDetail: ${serverDetail}")
                 if(serverDetail.success == true && serverDetail?.server?.state == status) {
                     rtn.success = true
@@ -432,13 +432,13 @@ class UpcloudApiService {
         return rtn
     }
 
-    static waitForServerNotStatus(Map authConfig, String serverId, String status) {
+    static waitForServerNotStatus(HttpApiClient client, Map authConfig, String serverId, String status) {
         def rtn = [success:false]
         try {
             def pending = true
             def attempts = 0
             while(pending) {
-                def serverDetail = getServerDetail(authConfig, serverId)
+                def serverDetail = getServerDetail(client, authConfig, serverId)
 				if(serverDetail.success == true && serverDetail?.server?.state != status) {
                     rtn.success = true
                     rtn.results = serverDetail.server
@@ -463,14 +463,14 @@ class UpcloudApiService {
         return rtn
     }
 
-    static checkServerReady(Map authConfig, String serverId) {
+    static checkServerReady(HttpApiClient client, Map authConfig, String serverId) {
         def rtn = [success:false]
         try {
             def pending = true
             def attempts = 0
             while(pending) {
                 sleep(1000l * 5l)
-                def serverDetail = getServerDetail(authConfig, serverId)
+                def serverDetail = getServerDetail(client, authConfig, serverId)
                 if(serverDetail.success == true && serverDetail?.server?.state) {
                     def tmpState = serverDetail.server.state
                     if(tmpState == 'started') {
@@ -494,14 +494,14 @@ class UpcloudApiService {
         return rtn
     }
 
-    static checkStorageReady(Map authConfig, String storageId) {
+    static checkStorageReady(HttpApiClient client, Map authConfig, String storageId) {
         def rtn = [success:false]
         try {
             def pending = true
             def attempts = 0
             while(pending) {
                 sleep(1000l * 5l)
-                def storageDetail = getStorageDetails(authConfig, storageId)
+                def storageDetail = getStorageDetails(client, authConfig, storageId)
                 if(storageDetail.success == true && storageDetail?.storage?.state) {
                     def tmpState = storageDetail.storage.state
                     if(tmpState == 'online') {
@@ -525,7 +525,7 @@ class UpcloudApiService {
         return rtn
     }
 
-    static attachStorage(Map authConfig, String serverId, String storageId, Integer index) {
+    static attachStorage(HttpApiClient client, Map authConfig, String serverId, String storageId, Integer index) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -538,7 +538,7 @@ class UpcloudApiService {
                             storage:storageId
                     ]
             ]
-            def callResults = callApi(authConfig, callPath, callOpts, 'POST')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.address = diskAddress
@@ -553,7 +553,7 @@ class UpcloudApiService {
         return rtn
     }
 
-    static detachStorage(Map authConfig, String serverId, String address) {
+    static detachStorage(HttpApiClient client, Map authConfig, String serverId, String address) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -563,7 +563,7 @@ class UpcloudApiService {
                             address:address
                     ]
             ]
-            def callResults = callApi(authConfig, callPath, callOpts, 'POST')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -639,12 +639,12 @@ class UpcloudApiService {
         return rtn
     }*/
 
-    static startServer(Map authConfig, String serverId) {
+    static startServer(HttpApiClient client, Map authConfig, String serverId) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = "/server/${serverId}/start"
-            def callResults = callApi(authConfig, callPath, callOpts, 'POST')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true || (callResults.success == false && callResults.errors.error.endsWith("Read timed out"))) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -658,7 +658,7 @@ class UpcloudApiService {
         return rtn
     }
 
-    static stopServer(Map authConfig, String serverId) {
+    static stopServer(HttpApiClient client, Map authConfig, String serverId) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -669,7 +669,7 @@ class UpcloudApiService {
                             'timeout':'60'
                     ]
             ]
-            def callResults = callApi(authConfig, callPath, callOpts, 'POST')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -684,7 +684,7 @@ class UpcloudApiService {
         return rtn
     }
 
-    static powerOffServer(Map authConfig, String serverId) {
+    static powerOffServer(HttpApiClient client, Map authConfig, String serverId) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -695,7 +695,7 @@ class UpcloudApiService {
                             'timeout':'60'
                     ]
             ]
-            def callResults = callApi(authConfig, callPath, callOpts, 'POST')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -709,13 +709,13 @@ class UpcloudApiService {
         return rtn
     }
 
-    static removeServer(Map authConfig, String serverId) {
+    static removeServer(HttpApiClient client, Map authConfig, String serverId) {
 		log.debug("removing server with id: ${serverId}")
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = "/server/${serverId}"
-            def callResults = callApi(authConfig, callPath, callOpts, 'DELETE')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'DELETE')
             if(callResults.success == true || callResults.errorCode == '404') {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -729,7 +729,7 @@ class UpcloudApiService {
         return rtn
     }
 
-    static resizeServer(Map authConfig, String serverId, Map serverConfig) {
+    static resizeServer(HttpApiClient client, Map authConfig, String serverId, Map serverConfig) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -744,7 +744,7 @@ class UpcloudApiService {
                 callOpts.body.server.core_number = (serverConfig.maxCores ?: 1)
                 callOpts.body.server.memory_amount = (serverConfig.maxMemory ?: ComputeUtility.ONE_GIGABYTE) / ComputeUtility.ONE_MEGABYTE
             }
-            def callResults = callApi(authConfig, callPath, callOpts, 'PUT')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'PUT')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -758,7 +758,7 @@ class UpcloudApiService {
         return rtn
     }
 
-    static resizeStorage(Map authConfig, String storageId, Map storageConfig) {
+    static resizeStorage(HttpApiClient client, Map authConfig, String storageId, Map storageConfig) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -769,7 +769,7 @@ class UpcloudApiService {
                             size:maxStorage
                     ]
             ]
-            def callResults = callApi(authConfig, callPath, callOpts, 'PUT')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'PUT')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -783,7 +783,7 @@ class UpcloudApiService {
         return rtn
     }
 
-    static createStorage(Map authConfig, Map storageConfig) {
+    static createStorage(HttpApiClient client, Map authConfig, Map storageConfig) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -797,7 +797,7 @@ class UpcloudApiService {
                             zone:storageConfig.zoneRef
                     ]
             ]
-            def callResults = callApi(authConfig, callPath, callOpts, 'POST')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -811,7 +811,7 @@ class UpcloudApiService {
         return rtn
     }
 
-    static createSnapshot(Map authConfig, String stroageId, Map storageConfig) {
+    static createSnapshot(HttpApiClient client, Map authConfig, String stroageId, Map storageConfig) {
         def rtn = [success:false]
         try {
             def callOpts = [:]
@@ -821,7 +821,7 @@ class UpcloudApiService {
                             title:storageConfig.snapshotName
                     ]
             ]
-            def callResults = callApi(authConfig, callPath, callOpts, 'POST')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -835,7 +835,7 @@ class UpcloudApiService {
         return rtn
     }
 
-    static waitForStorageStatus(Map authConfig, String storageId, String status, Map opts=[:]) {
+    static waitForStorageStatus(HttpApiClient client, Map authConfig, String storageId, String status, Map opts=[:]) {
         def rtn = [success:false]
         def maxAttempts = opts?.maxAttempts ?: 100
         def retryInterval = opts?.retryInterval ?: (1000l * 5l)
@@ -843,7 +843,7 @@ class UpcloudApiService {
             def pending = true
             def attempts = 0
             while(pending) {
-                def serverDetail = getStorageDetails(authConfig, storageId)
+                def serverDetail = getStorageDetails(client, authConfig, storageId)
                 if(serverDetail.success == true && serverDetail?.storage?.state == status) {
                     rtn.success = true
                     rtn.results = serverDetail.storage
@@ -863,13 +863,13 @@ class UpcloudApiService {
         return rtn
     }
 
-    static restoreSnapshot(Map authConfig, String storageId) {
+    static restoreSnapshot(HttpApiClient client, Map authConfig, String storageId) {
         log.debug("restoring snapshot with storage id: ${storageId}")
         def rtn = [success:false]
         try {
             def callOpts = [:]
             def callPath = "/storage/${storageId}/restore"
-            def callResults = callApi(authConfig, callPath, callOpts, 'POST')
+            def callResults = callApi(client, authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
                 rtn.success = true
@@ -896,7 +896,7 @@ class UpcloudApiService {
         return rtn
     }*/
 
-    static ServiceResponse callApi(Map authConfig, String path, Map opts = [:], String method) {
+    static ServiceResponse callApi(HttpApiClient client, Map authConfig, String path, Map opts = [:], String method) {
         def apiUrl = authConfig.apiUrl.toString()
         def username = authConfig.username.toString()
         def password = authConfig.password.toString()
@@ -923,8 +923,7 @@ class UpcloudApiService {
         }
 
         requestOptions.headers['Content-Type'] = 'application/json'
-
-        HttpApiClient client = new HttpApiClient()
+        log.info("client in callApi: ${client.dump()}")
         ServiceResponse response = client.callJsonApi(apiUrl, apiPath, username, password, requestOptions, method)
         return response
     }

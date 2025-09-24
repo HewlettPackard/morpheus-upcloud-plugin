@@ -5,6 +5,7 @@ import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.backup.BackupRestoreProvider
 import com.morpheusdata.core.backup.response.BackupRestoreResponse
 import com.morpheusdata.core.data.DataQuery
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.response.ServiceResponse;
 import com.morpheusdata.model.BackupRestore;
 import com.morpheusdata.model.BackupResult;
@@ -127,17 +128,18 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 				def instance = morpheus.async.instance.get(workload.instance.id).blockingGet()
 				def server = morpheus.async.computeServer.get(workload.serverId).blockingGet()
 				def cloud = morpheus.async.cloud.get(server.cloud.id).blockingGet()
+				HttpApiClient client = new HttpApiClient()
 				//auth config
 				def authConfig = plugin.getAuthConfig(cloud)
 				//stop the server
 				def stopResults = new UpcloudProvisionProvider(plugin, morpheus).stopServer(server)
 				//check this - wait for stopped
-				def statusResults = UpcloudApiService.waitForServerStatus(authConfig, server.externalId, 'stopped')
+				def statusResults = UpcloudApiService.waitForServerStatus(client, authConfig, server.externalId, 'stopped')
 				//restore
 				def restoreResults = []
 				def restoreSuccess = true
 				snapshotList?.each { snapshot ->
-					def restoreResult = UpcloudApiService.restoreSnapshot(authConfig, snapshot.storageId)
+					def restoreResult = UpcloudApiService.restoreSnapshot(client, authConfig, snapshot.storageId)
 					restoreSuccess = restoreResult.success && restoreSuccess
 					restoreResults << restoreResult
 				}
@@ -190,9 +192,10 @@ class UpcloudBackupRestoreProvider implements BackupRestoreProvider {
 			).blockingGet()
 
 			if(server) {
+				HttpApiClient client = new HttpApiClient()
 				//get status of server
 				def authConfig = plugin.getAuthConfig(server.cloud)
-				def serverDetail = UpcloudApiService.getServerDetail(authConfig, server.externalId)
+				def serverDetail = UpcloudApiService.getServerDetail(client, authConfig, server.externalId)
 				if(serverDetail.success == true && serverDetail?.server?.state == 'started') {
 					//running again
 					rtn.data.backupRestore.endDate = new Date()

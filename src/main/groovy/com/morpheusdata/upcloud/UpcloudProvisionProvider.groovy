@@ -340,7 +340,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 		try {
 			def containerConfig = workload.getConfigMap()
-			def server = workload.server
+			def server = morpheus.services.computeServer.get(workload.server.id)
+			log.debug("server 344: ${server.dump()}")
+			log.debug("server interfaces 344: ${server.interfaces}")
+
 			def cloud = server.cloud
 			def account = server.account
 			def cloudConfig = cloud.getConfigMap()
@@ -393,6 +396,8 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 						noAgent: (opts.config?.containsKey("noAgent") == true && opts.config.noAgent == true),
 						installAgent: (opts.config?.containsKey("noAgent") == false || (opts.config?.containsKey("noAgent") && opts.config.noAgent != true))
 				]
+				log.debug("run config server interfaces: ${runConfig.serverInterfaces}")
+				log.debug("run config: ${runConfig}")
 
 				if(servicePlan.internalId == 'custom') {
 					runConfig.maxMemory = workload.maxMemory ?: servicePlan.maxMemory
@@ -487,8 +492,12 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		def rtn = ServiceResponse.prepare()
 		try {
 			if(workload.server?.externalId) {
+				ComputeServer server = workload.server
+				Cloud cloud = server.cloud
+				HttpApiClient client = new HttpApiClient()
+				client.networkProxy = cloud.apiProxy
 				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
-				def statusResults = UpcloudApiService.waitForServerNotStatus(authConfigMap, workload.server.externalId, 'maintenance')
+				def statusResults = UpcloudApiService.waitForServerNotStatus(client, authConfigMap, workload.server.externalId, 'maintenance')
 				if(statusResults.success) {
 					def stopResults = stopServer(workload.server)
 					if(stopResults.success == true) {
@@ -521,8 +530,12 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		def rtn = ServiceResponse.prepare()
 		try {
 			if(workload.server?.externalId) {
+				ComputeServer server = workload.server
+				Cloud cloud = server.cloud
+				HttpApiClient client = new HttpApiClient()
+				client.networkProxy = cloud.apiProxy
 				def authConfigMap = plugin.getAuthConfig(workload.server?.cloud)
-				def statusResults = UpcloudApiService.waitForServerNotStatus(authConfigMap, workload.server.externalId, 'maintenance')
+				def statusResults = UpcloudApiService.waitForServerNotStatus(client, authConfigMap, workload.server.externalId, 'maintenance')
 				def startResults = startServer(workload.server)
 				log.debug("startWorkload: startResults: ${startResults}")
 				if(startResults.success == true) {
@@ -565,17 +578,19 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		log.debug "removeWorkload: ${workload} ${opts}"
 		ComputeServer server = workload.server
 		Cloud cloud = server.cloud
+		HttpApiClient client = new HttpApiClient()
+		client.networkProxy = cloud.apiProxy
 		if(workload.server?.externalId) {
 			def authConfig = plugin.getAuthConfig(cloud)
 			def stopWorkloadResult =  stopWorkload(workload)
 			if(stopWorkloadResult.success) {
-				def statusResult = UpcloudApiService.waitForServerStatus(authConfig, server.externalId, 'stopped')
+				def statusResult = UpcloudApiService.waitForServerStatus(client, authConfig, server.externalId, 'stopped')
 				if(statusResult.success == true) {
-					def removeResults = UpcloudApiService.removeServer(authConfig, server.externalId)
+					def removeResults = UpcloudApiService.removeServer(client, authConfig, server.externalId)
 					if(removeResults.success == true) {
 						server.volumes?.each { volume ->
 							if(volume.externalId) {
-								def volumeResults = UpcloudApiService.removeStorage(authConfig, volume.externalId)
+								def volumeResults = UpcloudApiService.removeStorage(client, authConfig, volume.externalId)
 							}
 						}
 						return ServiceResponse.success()
@@ -626,11 +641,14 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	@Override
 	ServiceResponse stopServer(ComputeServer computeServer) {
 		if(computeServer.managed == true || computeServer.computeServerType?.controlPower) {
+			Cloud cloud = computeServer.cloud
+			HttpApiClient client = new HttpApiClient()
+			client.networkProxy = cloud.apiProxy
 			def authConfig = plugin.getAuthConfig(computeServer.cloud)
-			def statusResults = UpcloudApiService.waitForServerNotStatus(authConfig, computeServer.externalId, 'maintenance')
-			def stopResults = UpcloudApiService.stopServer(authConfig, computeServer.externalId)
+			def statusResults = UpcloudApiService.waitForServerNotStatus(client, authConfig, computeServer.externalId, 'maintenance')
+			def stopResults = UpcloudApiService.stopServer(client, authConfig, computeServer.externalId)
 			if (stopResults.success) {
-				def waitResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'stopped')
+				def waitResults = UpcloudApiService.waitForServerStatus(client, authConfig, computeServer.externalId, 'stopped')
 				if(waitResults.success) {
 					return ServiceResponse.success()
 				} else {
@@ -653,11 +671,14 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	@Override
 	ServiceResponse startServer(ComputeServer computeServer) {
 		if(computeServer.managed == true || computeServer.computeServerType?.controlPower) {
+			Cloud cloud = computeServer.cloud
+			HttpApiClient client = new HttpApiClient()
+			client.networkProxy = cloud.apiProxy
 			def authConfig = plugin.getAuthConfig(computeServer.cloud)
-			def statusResults = UpcloudApiService.waitForServerNotStatus(authConfig, computeServer.externalId, 'maintenance')
-			def startResults = UpcloudApiService.startServer(authConfig, computeServer.externalId)
+			def statusResults = UpcloudApiService.waitForServerNotStatus(client, authConfig, computeServer.externalId, 'maintenance')
+			def startResults = UpcloudApiService.startServer(client, authConfig, computeServer.externalId)
 			if(startResults.success == true) {
-				def waitResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'started')
+				def waitResults = UpcloudApiService.waitForServerStatus(client, authConfig, computeServer.externalId, 'started')
 				if(waitResults.success == true) {
 					return ServiceResponse.success()
 				} else {
@@ -759,10 +780,13 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		// runConfig.server = saveAndGet(server)
 		log.debug("create server: ${runConfig}")
 
+		HttpApiClient client = new HttpApiClient()
+		ProxyConfiguration proxyConfiguration = workloadRequest?.proxyConfiguration ?: hostRequest?.proxyConfiguration ?: null
+		client.networkProxy = buildNetworkProxy(proxyConfiguration)
 		//set install agent
 		runConfig.installAgent = runConfig.noAgent && server.cloud.agentMode != 'cloudInit'
 		context.services.process.startProcessStep(workloadRequest.process, new ProcessEvent(stepType: ProcessStepType.PROVISION_DEPLOY), "")
-		def createResults = UpcloudApiService.createServer(runConfig.authConfig, runConfig)
+		def createResults = UpcloudApiService.createServer(client, runConfig.authConfig, runConfig)
 		log.debug("Upcloud Create Server Results: {}",createResults)
 		if(createResults.success == true && createResults.server) {
 			server.externalId = createResults.externalId
@@ -773,12 +797,12 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			runConfig.server = server
 			context.services.process.startProcessStep(workloadRequest.process, new ProcessEvent(stepType: ProcessStepType.PROVISION_LAUNCH), "")
 
-			UpcloudApiService.waitForServerExists(runConfig.authConfig, createResults.externalId)
+			UpcloudApiService.waitForServerExists(client, runConfig.authConfig, createResults.externalId)
 			// wait for ready
-			def statusResults = UpcloudApiService.checkServerReady(runConfig.authConfig, createResults.externalId)
+			def statusResults = UpcloudApiService.checkServerReady(client, runConfig.authConfig, createResults.externalId)
 			if (statusResults.success == true) {
 				//good to go
-				def serverDetails = UpcloudApiService.getServerDetail(runConfig.authConfig, createResults.externalId)
+				def serverDetails = UpcloudApiService.getServerDetail(client, runConfig.authConfig, createResults.externalId)
 				if (serverDetails.success == true) {
 					log.debug("server details: {}", serverDetails)
 
@@ -887,16 +911,19 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	}
 
 	def setNetworkInfo(serverInterfaces, externalNetworks, newInterface = null) {
+		log.debug("in set network info: serverInterfaces: ${serverInterfaces}, externalNetworks: ${externalNetworks}")
 		try {
 			if(externalNetworks?.size() > 0) {
 				serverInterfaces?.eachWithIndex { networkInterface, index ->
 					if(index == 0) { //only supports 1 interface
+						log.debug("only supports 1 interface 895")
 						if(networkInterface.externalId) {
 							//check for changes?
 						} else {
 							def privateIp = externalNetworks.find{ it.access == 'utility' && it.family == 'IPv4'}
 							def publicIp = externalNetworks.find{ it.access == 'public' && it.family == 'IPv4'}
 							def publicIpv6Ip = externalNetworks.find{ it.access == 'public' && it.family == 'IPv6'}
+							log.debug("network match: ${privateIp} ${publicIp} ${publicIpv6Ip}")
 							networkInterface.externalId = "${privateIp.address}"
 							if(!networkInterface.publicIpv6Address && publicIpv6Ip)
 								networkInterface.publicIpv6Address = publicIpv6Ip.address
@@ -917,6 +944,8 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	}
 
 	private applyComputeServerNetwork(ComputeServer server, privateIp, publicIp = null, hostname = null, networkPoolId = null, configOpts = [:], index = 0, networkOpts = [:]) {
+		def temp = morpheus.services.computeServer.get(server.id)
+		log.debug("temp server.interfaces in applyComputeServerNetwork: ${temp.interfaces}")
 		configOpts.each { k,v ->
 			server.setConfigProperty(k, v)
 		}
@@ -928,7 +957,8 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			server.sshHost = privateIp
 			log.debug("Setting private ip on server:${server.sshHost}")
 			network = server.interfaces?.find{it.ipAddress == privateIp}
-
+			log.debug("network 939: ${network}")
+			
 			if(network == null) {
 				if(index == 0)
 					network = server.interfaces?.find{it.primaryInterface == true}
@@ -937,17 +967,28 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				if(network == null)
 					network = server.interfaces?.size() > index ? server.interfaces[index] : null
 			}
+			
+			log.debug("network 950: ${network}")
+			
 			if(network == null) {
+				log.debug("network 953: creating new interface with privateIp: ${privateIp} and external id ${networkOpts.externalId}")
 				def interfaceName = server.sourceImage?.interfaceName ?: 'eth0'
 				network = new ComputeServerInterface(name:interfaceName, ipAddress:privateIp, primaryInterface:true,
 						displayOrder:(server.interfaces?.size() ?: 0) + 1, externalId: networkOpts.externalId)
+				log.debug("new network: ${network.dump()}")
+				log.debug("new network addresses: ${network.addresses.dump()}")
+				log.debug("new network addresses address: ${network.addresses?.address}")
 				if(network.addresses && !(privateIp in network.addresses.address)) {
+					log.debug("creating new network address")
 					network.addresses += new NetAddress(type: NetAddress.AddressType.IPV4, address: privateIp)
 				}
 				newInterface = true
 			} else {
+				log.debug("network 969: updating existing interface")
 				network.ipAddress = privateIp
 			}
+			log.debug("network.addresses: ${network.addresses}")
+			log.debug("network ip addresss: ${network.ipAddress}")
 			if(publicIp) {
 				publicIp = publicIp?.toString().contains("\n") ? publicIp.toString().replace("\n", "") : publicIp.toString()
 				network.publicIpAddress = publicIp
@@ -955,7 +996,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			}
 			if(networkPoolId) {
 				network.poolAssigned = true
-				network.networkPool = NetworkPool.get(networkPoolId.toLong())
+				network.networkPool = morpheus.services.network.pool.get(networkPoolId.toLong())
 			}
 			if(hostname) {
 				server.hostname = hostname
@@ -1082,7 +1123,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	}
 
 	ServiceResponse<ProvisionResponse> runHost(ComputeServer server, HostRequest hostRequest, Map opts) {
-		log.debug("runHost: ${server} ${hostRequest} ${opts}")
+		log.debug("runHost server 1090: ${server} ${hostRequest} ${opts}")
 
 		ProvisionResponse provisionResponse = new ProvisionResponse()
 		try {
@@ -1161,7 +1202,8 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				createOpts.osType = (virtualImage.osType?.platform == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform
 				createOpts.platform = createOpts.osType
 				createOpts.userConfig = hostRequest.usersConfiguration
-
+				createOpts.serverInterfaces = server.interfaces
+						
 				if(plan.internalId == 'custom') {
 					createOpts.maxMemory = server.maxMemory ?: plan.maxMemory
 					createOpts.maxCores = server.maxCores ?: plan.maxCores
@@ -1179,6 +1221,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				}
 
 				provisionResponse.createUsers = opts.userConfig.createUsers
+				log.debug("create opts 1189 in runhost: ${createOpts}")
 				context.async.computeServer.save(server).blockingGet()
 				//create it
 				log.debug("create server: ${createOpts}")
@@ -1235,7 +1278,8 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		ServiceResponse rtn = ServiceResponse.success()
 		def authConfigMap = plugin.getAuthConfig(server.cloud)
 		ServicePlan plan = resizeRequest.plan
-
+		HttpApiClient client = new HttpApiClient()
+		client.networkProxy = server.cloud.apiProxy
 		try {
 			server.status = 'resizing'
 			server = saveAndGet(server)
@@ -1249,7 +1293,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			def neededCores = (requestedCores ?: 1) - (currentCores ?: 1)
 			def doStop = (plan?.id != server.plan?.id || neededMemory != 0 || neededCores != 0 || resizeRequest.volumesUpdate)
 			if(doStop) {
-				def waitResults = UpcloudApiService.waitForServerStatus(authConfigMap, server.externalId, 'stopped')
+				def waitResults = UpcloudApiService.waitForServerStatus(client, authConfigMap, server.externalId, 'stopped')
 				if (waitResults.success != true) {
 					throw new Exception('error stopping vm ' + (waitResults.msg ?: ''))
 				}
@@ -1263,7 +1307,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				else {
 					resizeOpts = [maxCores:requestedCores, maxMemory:requestedMemory]
 				}
-				def resizeResults = UpcloudApiService.resizeServer(authConfigMap, server.externalId, resizeOpts)
+				def resizeResults = UpcloudApiService.resizeServer(client, authConfigMap, server.externalId, resizeOpts)
 				if(resizeResults.success == true) {
 					server.plan = plan
 					server.maxMemory = requestedMemory.toLong()
@@ -1293,20 +1337,20 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 				def zoneRef = server.cloud.getConfigMap().zone
 				def addDiskConfig = [name: newVolumeProps.name, zoneRef: zoneRef, serverName: server.name, maxStorage: newVolumeProps.volume.maxStorage]
-				def addDiskResults = UpcloudApiService.createStorage(authConfigMap, addDiskConfig)
+				def addDiskResults = UpcloudApiService.createStorage(client, authConfigMap, addDiskConfig)
 				log.debug("addDiskResults ${addDiskResults}")
 
 				if (!addDiskResults.success)
 					throw new Exception("error creating new volume: ${addDiskResults.msg ?: 'unknown'}")
 				def newVolumeId = addDiskResults.data.storage.uuid
-				def checkReadyResult = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
+				def checkReadyResult = UpcloudApiService.checkStorageReady(client, authConfigMap, newVolumeId)
 				if (!checkReadyResult.success)
 					throw new Exception("volume never became ready: ${checkReadyResult.msg ?: 'unknown'}")
 				// Attach the new one
-				def attachResults = UpcloudApiService.attachStorage(authConfigMap, server.externalId, newVolumeId, newCounter)
+				def attachResults = UpcloudApiService.attachStorage(client, authConfigMap, server.externalId, newVolumeId, newCounter)
 				if (!attachResults.success)
 					throw new Exception("volume failed to attach: ${attachResults.msg ?: 'unknown'}")
-				def waitAttachResults = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
+				def waitAttachResults = UpcloudApiService.checkStorageReady(client, authConfigMap, newVolumeId)
 				if (!waitAttachResults.success)
 					throw new Exception("volume never attached: ${waitAttachResults.msg ?: 'unknown'}")
 
@@ -1334,7 +1378,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					if (updateProps.maxStorage > existing.maxStorage) {
 						def volumeId = existing.externalId
 						def storageVolumeId = existing.id
-						def resizeResults = UpcloudApiService.resizeStorage(authConfigMap, volumeId, [maxStorage: volumeUpdate.volume.maxStorage])
+						def resizeResults = UpcloudApiService.resizeStorage(client, authConfigMap, volumeId, [maxStorage: volumeUpdate.volume.maxStorage])
 						log.debug("resizeResults ${resizeResults}")
 
 						if (resizeResults.success == true) {
@@ -1355,20 +1399,20 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 					def zoneRef = server.cloud.getConfigMap().zone
 					def addDiskConfig = [name: updateProps.name, zoneRef: zoneRef, serverName: server.name, maxStorage: updateProps.volume.maxStorage]
-					def addDiskResults = UpcloudApiService.createStorage(authConfigMap, addDiskConfig)
+					def addDiskResults = UpcloudApiService.createStorage(client, authConfigMap, addDiskConfig)
 					log.debug("addDiskResults ${addDiskResults}")
 
 					if (!addDiskResults.success)
 						throw new Exception("error creating new volume: ${addDiskResults.msg ?: 'unknown'}")
 					def newVolumeId = addDiskResults.data.storage.uuid
-					def checkReadyResult = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
+					def checkReadyResult = UpcloudApiService.checkStorageReady(client, authConfigMap, newVolumeId)
 					if (!checkReadyResult.success)
 						throw new Exception("volume never became ready: ${checkReadyResult.msg ?: 'unknown'}")
 					// Attach the new one
-					def attachResults = UpcloudApiService.attachStorage(authConfigMap, server.externalId, newVolumeId, newCounter)
+					def attachResults = UpcloudApiService.attachStorage(client, authConfigMap, server.externalId, newVolumeId, newCounter)
 					if (!attachResults.success)
 						throw new Exception("volume failed to attach: ${attachResults.msg ?: 'unknown'}")
-					def waitAttachResults = UpcloudApiService.checkStorageReady(authConfigMap, newVolumeId)
+					def waitAttachResults = UpcloudApiService.checkStorageReady(client, authConfigMap, newVolumeId)
 					if (!waitAttachResults.success)
 						throw new Exception("volume never attached: ${waitAttachResults.msg ?: 'unknown'}")
 
@@ -1395,9 +1439,9 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				def volumeId = volume.externalId
 				def volumeAddress = volume.internalId
 				if(volumeAddress) {
-					def detachResults = UpcloudApiService.detachStorage(authConfigMap, server.externalId, volumeAddress)
+					def detachResults = UpcloudApiService.detachStorage(client, authConfigMap, server.externalId, volumeAddress)
 					if(detachResults.success == true) {
-						UpcloudApiService.removeStorage(authConfigMap, volumeId)
+						UpcloudApiService.removeStorage(client, authConfigMap, volumeId)
 						morpheus.async.storageVolume.remove([volume], server, true).blockingGet()
 					}
 				}
@@ -1406,7 +1450,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			server = saveAndGet(server)
 
 			if(doStop == true) {
-				def waitResults = UpcloudApiService.waitForServerStatus(authConfigMap, server.externalId, 'running')
+				def waitResults = UpcloudApiService.waitForServerStatus(client, authConfigMap, server.externalId, 'running')
 			}
 
 			rtn.success = true
@@ -1417,5 +1461,18 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			rtn.error= "Error resizing instance to ${plan.name} ${ex.getMessage()}"
 		}
 		return rtn
+	}
+
+	private static NetworkProxy buildNetworkProxy(ProxyConfiguration proxyConfiguration) {
+		NetworkProxy networkProxy = new NetworkProxy()
+		if(proxyConfiguration) {
+			networkProxy.proxyDomain = proxyConfiguration.proxyDomain
+			networkProxy.proxyHost = proxyConfiguration.proxyHost
+			networkProxy.proxyPassword = proxyConfiguration.proxyPassword
+			networkProxy.proxyUser = proxyConfiguration.proxyUser
+			networkProxy.proxyPort = proxyConfiguration.proxyPort
+			networkProxy.proxyWorkstation = proxyConfiguration.proxyWorkstation
+		}
+		return networkProxy
 	}
 }

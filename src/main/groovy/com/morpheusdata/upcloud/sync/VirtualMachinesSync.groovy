@@ -1,5 +1,6 @@
 package com.morpheusdata.upcloud.sync
 
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.model.StorageVolume
 import com.morpheusdata.model.projection.ServicePlanIdentityProjection
 import com.morpheusdata.upcloud.util.UpcloudComputeUtility
@@ -28,21 +29,24 @@ import io.reactivex.rxjava3.core.Observable
 
 @Slf4j
 class VirtualMachinesSync {
+    private HttpApiClient client
     private Cloud cloud
     UpcloudPlugin plugin
     private MorpheusContext morpheusContext
 
-    VirtualMachinesSync(Cloud cloud, UpcloudPlugin plugin, MorpheusContext morpheusContext) {
+    VirtualMachinesSync(HttpApiClient client, Cloud cloud, UpcloudPlugin plugin, MorpheusContext morpheusContext) {
+        this.client = client
         this.cloud = cloud
         this.plugin = plugin
         this.morpheusContext = morpheusContext
     }
 
     def execute() {
+        log.info("SYNCING VIRTUAL MACHINES")
         try {
             def inventoryLevel = cloud.inventoryLevel ?: (cloud.getConfigProperty('importExisting') in [true, 'true', 'on'] ? 'basic' : 'off')
             def authConfig = plugin.getAuthConfig(cloud)
-            def apiResults = UpcloudApiService.listServers(authConfig)
+            def apiResults = UpcloudApiService.listServers(client, authConfig)
             log.debug("apiResults: ${apiResults}")
 
             if (apiResults.success == true) {
@@ -94,7 +98,7 @@ class VirtualMachinesSync {
                 def addCapacityConfig = [maxCores:(cloudItem.'core_number' ?: 1), maxMemory:(cloudItem['memory_amount']?.toLong()*ComputeUtility.ONE_MEGABYTE),
                      maxStorage:0, usedStorage:0
                 ]
-                def serverResults = UpcloudComputeUtility.getServerDetail(authConfig, cloudItem.uuid)
+                def serverResults = UpcloudApiService.getServerDetail(client, authConfig, cloudItem.uuid)
                 if(serverResults.success == true && serverResults.server) {
                     //stats and ip address info
                     if(serverResults.server.vnc == 'on') {
@@ -185,7 +189,7 @@ class VirtualMachinesSync {
                         server.capacityInfo.maxMemory = maxMemory
                         doSave = true
                     }
-                    serverResults = UpcloudComputeUtility.getServerDetail(authConfig, vm.uuid)
+                    serverResults = UpcloudApiService.getServerDetail(client, authConfig, vm.uuid)
                     if (serverResults.success == true && serverResults.server) {
                         //stats and ip address info
                         def vncOn = serverResults.server.vnc == 'on'

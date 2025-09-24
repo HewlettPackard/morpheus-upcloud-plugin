@@ -22,27 +22,31 @@ class UpcloudComputeUtility {
     static upcloudApiVersion = '1.3'
     static requestTimeout = 300000 //5 minutes?
 
-    static getServerDetail(Map authConfig, String serverId) {
-        def rtn = [success:false]
-        try {
-            def callOpts = [:]
-            def callPath = "/server/${serverId}"
-            def callResults = UpcloudApiService.callApi(authConfig, callPath, callOpts, 'GET')
-            if(callResults.success == true) {
-                rtn.data = callResults.data
-                rtn.server = rtn.data?.server
-                rtn.volumes = getVmVolumes(rtn.data?.server?.'storage_devices'?.'storage_device')
-                rtn.networks = getVmNetworks(rtn.data?.server?.'ip_addresses'?.'ip_address')
-                rtn.success = true
-            } else {
-                rtn.success = false
-            }
-        } catch (e) {
-            log.error "Error on getServerDetail: ${e}", e
-            rtn.success = false
-        }
-        return rtn
-    }
+//    static getServerDetail(Map authConfig, String serverId) {
+//        def rtn = [success:false]
+//        try {
+//            def callOpts = [:]
+//            def callPath = "/server/${serverId}"
+//            def callResults = UpcloudApiService.callApi(authConfig, callPath, callOpts, 'GET')
+//            log.info("getServerDetail call results data: ${callResults.data}")
+//            log.info("getServerDetail call results server: ${callResults.data}")
+//
+//            if(callResults.success == true) {
+//                rtn.data = callResults.data
+//                rtn.server = rtn.data?.server
+//                rtn.volumes = getVmVolumes(rtn.data?.server?.'storage_devices'?.'storage_device')
+//                rtn.networks = getVmNetworks(rtn.data?.server?.'ip_addresses'?.'ip_address')
+//                log.info("rtn.networks: ${rtn.networks}")
+//                rtn.success = true
+//            } else {
+//                rtn.success = false
+//            }
+//        } catch (e) {
+//            log.error "Error on getServerDetail: ${e}", e
+//            rtn.success = false
+//        }
+//        return rtn
+//    }
 
     static getVmVolumes(storageDevices) {
         def rtn = []
@@ -62,10 +66,12 @@ class UpcloudComputeUtility {
     }
 
     static getVmNetworks(networkDevices) {
+        log.debug("getVmNetworks: ${networkDevices}")
         def rtn = []
         try {
             def counter = 0
             networkDevices?.each { networkDevice ->
+                log.debug("networkDevice: ${networkDevice}")
                 def newNic = [access:networkDevice.access, family:networkDevice.family, address:networkDevice.address,
                               row:counter]
                 rtn << newNic

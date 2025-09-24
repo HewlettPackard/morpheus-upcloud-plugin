@@ -1,6 +1,7 @@
 package com.morpheusdata.upcloud.util
 
 import com.morpheusdata.*
+import com.morpheusdata.core.util.HttpApiClient
 import groovy.json.JsonOutput
 import groovy.util.logging.Commons
 import org.apache.http.*
@@ -13,10 +14,11 @@ import com.morpheusdata.upcloud.services.UpcloudApiService
 
 @Commons
 class UpcloudStatusUtility {
-    static testConnection(Map authConfig) {
+    static testConnection(HttpApiClient client, Map authConfig) {
+        log.debug("testing connection: ${client.dump()}")
         def rtn = [success:false, invalidLogin:false]
         try {
-            def results = UpcloudApiService.listZones(authConfig)
+            def results = UpcloudApiService.listZones(client, authConfig)
             rtn.success = results.success
         } catch(e) {
             log.error("testConnection to upcloud: ${e}")
@@ -24,38 +26,38 @@ class UpcloudStatusUtility {
         return rtn
     }
 
-    static getVmVolumes(storageDevices) {
-        def rtn = []
-        try {
-            storageDevices?.eachWithIndex { storageDevice, index ->
-                if(storageDevice.type == 'disk') {
-                    def newDisk = [address:storageDevice.address, size:storageDevice.'storage_size',
-                                   description:storageDevice.'storage_title', name:storageDevice.'storage_title',
-                                   type:'disk', storageId:storageDevice.storage, index:index, deviceName:storageDevice.address]
-                    rtn << newDisk
-                }
-            }
-        } catch(e) {
-            log.error("getVmVolumes error: ${e}")
-        }
-        return rtn
-    }
-
-    static getVmNetworks(networkDevices) {
-        def rtn = []
-        try {
-            def counter = 0
-            networkDevices?.each { networkDevice ->
-                def newNic = [access:networkDevice.access, family:networkDevice.family, address:networkDevice.address,
-                              row:counter]
-                rtn << newNic
-                counter++
-            }
-        } catch(e) {
-            log.error("getVmNetworks error: ${e}")
-        }
-        return rtn
-    }
+//    static getVmVolumes(storageDevices) {
+//        def rtn = []
+//        try {
+//            storageDevices?.eachWithIndex { storageDevice, index ->
+//                if(storageDevice.type == 'disk') {
+//                    def newDisk = [address:storageDevice.address, size:storageDevice.'storage_size',
+//                                   description:storageDevice.'storage_title', name:storageDevice.'storage_title',
+//                                   type:'disk', storageId:storageDevice.storage, index:index, deviceName:storageDevice.address]
+//                    rtn << newDisk
+//                }
+//            }
+//        } catch(e) {
+//            log.error("getVmVolumes error: ${e}")
+//        }
+//        return rtn
+//    }
+//
+//    static getVmNetworks(networkDevices) {
+//        def rtn = []
+//        try {
+//            def counter = 0
+//            networkDevices?.each { networkDevice ->
+//                def newNic = [access:networkDevice.access, family:networkDevice.family, address:networkDevice.address,
+//                              row:counter]
+//                rtn << newNic
+//                counter++
+//            }
+//        } catch(e) {
+//            log.error("getVmNetworks error: ${e}")
+//        }
+//        return rtn
+//    }
 
     static validateServerConfig(Map opts=[:]){
         def rtn = [success: true, errors: []]

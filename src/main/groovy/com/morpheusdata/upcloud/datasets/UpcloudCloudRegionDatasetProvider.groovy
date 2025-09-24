@@ -6,8 +6,10 @@ import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.data.DatasetInfo
 import com.morpheusdata.core.data.DatasetQuery
 import com.morpheusdata.core.providers.AbstractDatasetProvider
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.CloudRegion
+import com.morpheusdata.model.NetworkProxy
 import com.morpheusdata.response.ServiceResponse
 import com.morpheusdata.upcloud.UpcloudPlugin
 import com.morpheusdata.upcloud.services.UpcloudApiService
@@ -48,8 +50,15 @@ class UpcloudCloudRegionDatasetProvider extends AbstractDatasetProvider<CloudReg
     }
 
     Observable<CloudRegion> list(DatasetQuery query) {
+        log.debug("listing zones: ${query.parameters}, apiProxy: ${query.zone?.apiProxy?.id}")
         Map authConfig = plugin.getAuthConfig(query.parameters)
-        ServiceResponse apiResults = upcloudApiService.listZones(authConfig)
+        HttpApiClient client = new HttpApiClient()
+        Long apiProxyId = query.zone?.apiProxy?.id?.toLong()
+        if (apiProxyId) {
+            NetworkProxy proxySettings = morpheusContext.services.network.networkProxy.get(apiProxyId)
+            client.networkProxy = proxySettings
+        }
+        ServiceResponse apiResults = upcloudApiService.listZones(client, authConfig)
         if(apiResults.success) {
             return Observable.fromIterable(((List<CloudRegion>)apiResults.data.zones.zone).sort{it.description})
         }

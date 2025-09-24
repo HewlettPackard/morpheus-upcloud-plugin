@@ -89,13 +89,13 @@ class UpcloudCloudProvider implements CloudProvider {
 				fieldName:'type', fieldCode:'gomorpheus.label.credentials', fieldLabel:'Credentials', fieldContext:'credential', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:true, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:'local', custom:false, displayOrder:1, fieldClass:null, optionSource:'credentials', config: JsonOutput.toJson(credentialTypes:['username-password']).toString()),
 			new OptionType(code:'zoneType.upcloud.username', inputType:OptionType.InputType.TEXT, name:'Username', category:'zoneType.upcloud',
-				fieldName:'username', fieldCode: 'gomorpheus.optiontype.Username', fieldLabel:'Username', fieldContext:'config', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:false, global:false,
+				fieldName:'username', fieldCode: 'gomorpheus.optiontype.Username', fieldLabel:'Username', fieldContext:'config', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:true, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:2, fieldClass:null, localCredential:true),
 			new OptionType(code:'zoneType.upcloud.password', inputType:OptionType.InputType.PASSWORD, name:'Password', category:'zoneType.upcloud',
-				fieldName:'password', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'config', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:false, global:false,
+				fieldName:'password', fieldCode: 'gomorpheus.optiontype.Password', fieldLabel:'Password', fieldContext:'config', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:true, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:3, fieldClass:null, localCredential:true),
 			new OptionType(code:'zoneType.upcloud.zone', inputType:OptionType.InputType.SELECT, name:'Zone', category:'zoneType.upcloud',
-				fieldName:'zone', fieldCode: 'gomorpheus.optiontype.Zone', fieldLabel:'Zone', fieldContext:'config', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:false, global:false,
+				fieldName:'zone', fieldCode: 'gomorpheus.optiontype.Zone', fieldLabel:'Zone', fieldContext:'config', fieldSet:'Details', fieldGroup:'', required:true, enabled:true, editable:true, global:false,
 				placeHolder:null, helpBlock:'', defaultValue:null, custom:false, displayOrder:4, fieldClass:null, optionSourceType: null, optionSource: 'upcloud.upcloudCloudDataset', dependsOn: 'config.username, config.password, credential.type, credential.username, credential.password'),
 			new OptionType(name: 'Inventory', code: 'upcloud-plugin-inventory-level', displayOrder:5, fieldContext: 'domain', fieldLabel: 'Inventory', fieldCode: 'gomorpheus.label.inventory',	fieldName: 'inventoryLevel',
 				inputType: OptionType.InputType.SELECT,	optionSource:'upcloudPluginInventoryLevels', defaultValue: 'off', noSelection: 'Off')
@@ -282,7 +282,8 @@ class UpcloudCloudProvider implements CloudProvider {
 					return new ServiceResponse(success: false, msg: 'Enter a password')
 				} else {
 					def authConfig = [username: username, password: password, apiUrl: UpcloudApiService.upCloudEndpoint]
-					def zoneList = UpcloudApiService.listZones(authConfig)
+					HttpApiClient client = new HttpApiClient()
+					def zoneList = UpcloudApiService.listZones(client, authConfig)
 					if(zoneList.success == true) {
 						return ServiceResponse.success()
 					} else {
@@ -306,6 +307,7 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse initializeCloud(Cloud cloudInfo) {
+		log.debug("initializing cloud: ${cloudInfo.dump()}")
 		ServiceResponse rtn = new ServiceResponse(success: false)
 		try {
 			if(cloudInfo) {
@@ -335,9 +337,7 @@ class UpcloudCloudProvider implements CloudProvider {
 	@Override
 	ServiceResponse refresh(Cloud cloudInfo) {
 		ServiceResponse rtn = new ServiceResponse(success: false)
-
 		HttpApiClient client
-
 		try {
 			NetworkProxy proxySettings = cloudInfo.apiProxy
 			client = new HttpApiClient()
@@ -349,13 +349,13 @@ class UpcloudCloudProvider implements CloudProvider {
 			def apiPort = apiUrlObj.getPort() > 0 ? apiUrlObj.getPort() : (apiUrlObj?.getProtocol()?.toLowerCase() == 'https' ? 443 : 80)
 			def hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, proxySettings)
 			if(hostOnline) {
-				def testResults = UpcloudStatusUtility.testConnection(authConfig)
+				def testResults = UpcloudStatusUtility.testConnection(client, authConfig)
 				if(testResults.success == true) {
 					//def doInventory = cloudInfo.getConfigProperty('importExisting')
 					//def vmCacheOpts = [zone:zone, createNew:(inventoryLevel == 'basic' || inventoryLevel == 'full'), inventoryLevel:inventoryLevel]
 
-					(new UserImagesSync(cloudInfo, this.plugin, context)).execute()
-					(new VirtualMachinesSync(cloudInfo, this.plugin, context)).execute()
+					(new UserImagesSync(client, cloudInfo, this.plugin, context)).execute()
+					(new VirtualMachinesSync(client, cloudInfo, this.plugin, context)).execute()
 
 					rtn = ServiceResponse.success()
 				} else {
@@ -386,11 +386,20 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	void refreshDaily(Cloud cloudInfo) {
+		HttpApiClient client
 		try {
-			(new PlansSync(cloudInfo, this.plugin, context)).execute()
-			(new PublicTemplatesSync(cloudInfo, this.plugin, context)).execute()
+			NetworkProxy proxySettings = cloudInfo.apiProxy
+			client = new HttpApiClient()
+			client.networkProxy = proxySettings
+			
+			(new PlansSync(client, cloudInfo, this.plugin, context)).execute()
+			(new PublicTemplatesSync(client, cloudInfo, this.plugin, context)).execute()
 		} catch(e) {
 			log.error("refreshZone error: ${e}", e)
+		} finally {
+			if(client) {
+				client.shutdownClient()
+			}
 		}
 	}
 
@@ -515,17 +524,20 @@ class UpcloudCloudProvider implements CloudProvider {
 	ServiceResponse deleteServer(ComputeServer computeServer) {
 		log.debug("deleteServer: ${computeServer}")
 		if(computeServer?.externalId && (computeServer.managed == true || computeServer.computeServerType?.controlPower)) {
+			HttpApiClient client = new HttpApiClient()
+			client.networkProxy = computeServer.cloud.apiProxy
 			def authConfig = plugin.getAuthConfig(computeServer.cloud)
-			def stopResults = UpcloudApiService.stopServer(authConfig, computeServer.externalId)
+			
+			def stopResults = UpcloudApiService.stopServer(client, authConfig, computeServer.externalId)
 			log.debug("upcloud stopResults: ${stopResults}")
 			if(stopResults.success) {
-				def statusResults = UpcloudApiService.waitForServerStatus(authConfig, computeServer.externalId, 'stopped')
+				def statusResults = UpcloudApiService.waitForServerStatus(client, authConfig, computeServer.externalId, 'stopped')
 				if(statusResults.success) {
-					def removeResults = UpcloudApiService.removeServer(authConfig, computeServer.externalId)
+					def removeResults = UpcloudApiService.removeServer(client, authConfig, computeServer.externalId)
 					if(removeResults.success) {
 						computeServer.volumes?.each { volume ->
 							if(volume.externalId) {
-								def volumeResults = UpcloudApiService.removeStorage(authConfig, volume.externalId)
+								def volumeResults = UpcloudApiService.removeStorage(client, authConfig, volume.externalId)
 							}
 						}
 					}

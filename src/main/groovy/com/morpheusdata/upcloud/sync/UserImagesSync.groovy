@@ -2,6 +2,7 @@ package com.morpheusdata.upcloud.sync
 
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.data.DataQuery
+import com.morpheusdata.core.util.HttpApiClient
 import com.morpheusdata.core.util.SyncTask
 import com.morpheusdata.model.Cloud
 import com.morpheusdata.model.OsType
@@ -13,21 +14,24 @@ import groovy.util.logging.Slf4j
 
 @Slf4j
 class UserImagesSync {
+    private HttpApiClient client
     private Cloud cloud
     UpcloudPlugin plugin
     private MorpheusContext morpheusContext
 
-    UserImagesSync(Cloud cloud, UpcloudPlugin plugin, MorpheusContext morpheusContext) {
+    UserImagesSync(HttpApiClient client, Cloud cloud, UpcloudPlugin plugin, MorpheusContext morpheusContext) {
+        this.client = client
         this.cloud = cloud
         this.plugin = plugin
         this.morpheusContext = morpheusContext
     }
 
     def execute() {
+        log.info("SYNCING USER IMAGES")
         try {
             def authConfig = plugin.getAuthConfig(cloud)
             log.debug("authConfig: ${authConfig}")
-            def imageResults = UpcloudApiService.listUserTemplates(authConfig)
+            def imageResults = UpcloudApiService.listUserTemplates(client, authConfig)
             log.debug("image results: ${imageResults}")
             if (imageResults.success == true) {
                 log.debug("CLOUD ID: ${cloud.id}")
