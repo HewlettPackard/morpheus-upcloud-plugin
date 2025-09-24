@@ -50,12 +50,13 @@ class UpcloudCloudRegionDatasetProvider extends AbstractDatasetProvider<CloudReg
     }
 
     Observable<CloudRegion> list(DatasetQuery query) {
-        log.debug("listing zones: ${query.parameters}, apiProxy: ${query.zone?.apiProxy?.id}")
+        log.info("listing zones: ${query.parameters}, apiProxy: ${query.zone?.apiProxy?.id}")
         Map authConfig = plugin.getAuthConfig(query.parameters)
         HttpApiClient client = new HttpApiClient()
-        Long apiProxyId = query.zone?.apiProxy?.id?.toLong()
+        def apiProxyId = query.zone?.apiProxy?.id
+        log.info("apiProxyId: ${apiProxyId}")
         if (apiProxyId) {
-            NetworkProxy proxySettings = morpheusContext.services.network.networkProxy.get(apiProxyId)
+            NetworkProxy proxySettings = morpheusContext.services.network.networkProxy.get(apiProxyId.toLong())
             client.networkProxy = proxySettings
         }
         ServiceResponse apiResults = upcloudApiService.listZones(client, authConfig)
