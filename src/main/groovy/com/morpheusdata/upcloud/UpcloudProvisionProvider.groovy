@@ -781,7 +781,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		log.debug("create server: ${runConfig}")
 
 		HttpApiClient client = new HttpApiClient()
-		ProxyConfiguration proxyConfiguration = workloadRequest?.proxyConfiguration ?: hostRequest?.proxyConfiguration ?: null
+		ProxyConfiguration proxyConfiguration = workloadRequest?.proxyConfiguration ?: null
 		client.networkProxy = buildNetworkProxy(proxyConfiguration)
 		//set install agent
 		runConfig.installAgent = runConfig.noAgent && server.cloud.agentMode != 'cloudInit'
