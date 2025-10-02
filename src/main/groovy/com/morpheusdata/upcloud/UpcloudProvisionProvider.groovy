@@ -251,6 +251,12 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	ServiceResponse validateWorkload(Map opts) {
 		return ServiceResponse.success()
 	}
+	
+	ServiceResponse validateHost(ComputeServer server, Map opts) {
+		log.debug "validateDockerHost: ${server} ${opts}"
+		return ServiceResponse.success()
+	}
+
 
 	Boolean canAddVolumes() {
 		return true

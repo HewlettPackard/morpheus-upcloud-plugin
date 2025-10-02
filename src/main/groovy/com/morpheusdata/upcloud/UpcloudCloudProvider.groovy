@@ -244,6 +244,18 @@ class UpcloudCloudProvider implements CloudProvider {
 		return serverTypes
 	}
 
+	def validateServerConfig(ComputeServer server, Map opts=[:]) {
+		log.debug "validateServiceConfiguration: $opts"
+		def rtn = [success: true, errors: []]
+		if(opts?.config?.containsKey('nodeCount')){
+			def validationOpts = [
+					nodeCount: opts.config.nodeCount
+			]
+			rtn = UpcloudStatusUtility.validateServerConfig(validationOpts)
+		}
+		return rtn
+	}
+	
 	/**
 	 * Validates the submitted cloud information to make sure it is functioning correctly.
 	 * If a {@link ServiceResponse} is not marked as successful then the validation results will be
