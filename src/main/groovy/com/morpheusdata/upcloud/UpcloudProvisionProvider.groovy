@@ -817,8 +817,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					def publicIp = serverDetails.server.'ip_addresses'?.'ip_address'?.find {
 						it.family == 'IPv4' && it.access == 'public'
 					}
-					def serverConfigOpts = [:]
-					applyComputeServerNetwork(server, privateIp.address, publicIp.address, null, null, serverConfigOpts)
+					applyNewSessionComputeServerNetwork(server.id, privateIp.address, publicIp?.address, null, null, [:], 0)
 					taskResults.server = createResults.server
 					taskResults.success = true
 
@@ -943,15 +942,27 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		}
 	}
 
-	private applyComputeServerNetwork(ComputeServer server, privateIp, publicIp = null, hostname = null, networkPoolId = null, configOpts = [:], index = 0, networkOpts = [:]) {
-		def temp = morpheus.services.computeServer.get(server.id)
-		log.debug("temp server.interfaces in applyComputeServerNetwork: ${temp.interfaces}")
+	def applyNewSessionComputeServerNetwork(serverId, privateIp, publicIp = null, hostname = null, networkPoolId = null, configOpts = [:], index = 0, networkOpts = [:]) {
+		def rtn
+		
+		ComputeServer server = context.async.computeServer.get(serverId).blockingGet()
 		configOpts.each { k,v ->
 			server.setConfigProperty(k, v)
 		}
-		ComputeServerInterface network
+		rtn = applyComputeServerNetworkIp(server, privateIp, publicIp, hostname, networkPoolId, index, networkOpts)
+		context.services.computeServer.save(server)
+		
+		return rtn
+	}
+	
+	private applyComputeServerNetworkIp(ComputeServer server, privateIp, publicIp = null, hostname = null, networkPoolId = null, index = 0, networkOpts = [:]) {
+		def temp = morpheus.services.computeServer.get(server.id)
+		log.debug("temp server.interfaces in applyComputeServerNetwork: ${temp.interfaces}")
+		
+		def network
 		if(privateIp) {
 			privateIp = privateIp?.toString().contains("\n") ? privateIp.toString().replace("\n", "") : privateIp.toString()
+			log.info("private ip: ${privateIp}")
 			def newInterface = false
 			server.internalIp = privateIp
 			server.sshHost = privateIp
@@ -973,10 +984,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			if(network == null) {
 				log.debug("network 953: creating new interface with privateIp: ${privateIp} and external id ${networkOpts.externalId}")
 				def interfaceName = server.sourceImage?.interfaceName ?: 'eth0'
+				log.info("creating new interface with name: ${interfaceName}")
 				network = new ComputeServerInterface(name:interfaceName, ipAddress:privateIp, primaryInterface:true,
-						displayOrder:(server.interfaces?.size() ?: 0) + 1, externalId: networkOpts.externalId)
+						displayOrder:(server.interfaces?.size() ?: 0) + 1)
 				log.debug("new network: ${network.dump()}")
-				log.debug("new network addresses: ${network.addresses.dump()}")
+				log.debug("new network addresses: ${network.addresses}")
 				log.debug("new network addresses address: ${network.addresses?.address}")
 				if(network.addresses && !(privateIp in network.addresses.address)) {
 					log.debug("creating new network address")
@@ -989,8 +1001,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			}
 			log.debug("network.addresses: ${network.addresses}")
 			log.debug("network ip addresss: ${network.ipAddress}")
+			log.info("public ip: ${publicIp}")
 			if(publicIp) {
 				publicIp = publicIp?.toString().contains("\n") ? publicIp.toString().replace("\n", "") : publicIp.toString()
+				log.info("public ip after clean: ${publicIp}")
 				network.publicIpAddress = publicIp
 				server.externalIp = publicIp
 			}
@@ -1007,12 +1021,17 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					network[key] = value
 				}
 			}
-
+			log.info("server: ${server.dump()}")
+			log.info("network: ${network.dump()}")
+			
 			if (newInterface == true) {
-				def tempNetwork = context.services.computeServer.computeServerInterface.create(network)
-				server.interfaces.add(tempNetwork)
-				//context.async.computeServer.computeServerInterface.create([network], server).blockingGet()
+				log.info("creating new interface")
+//				def tempNetwork = context.services.computeServer.computeServerInterface.create(network)
+//				log.info("adding new interface to server")
+//				server.interfaces.add(tempNetwork)
+				context.async.computeServer.computeServerInterface.create([network], server).blockingGet()
 			} else {
+				log.info("saving existing interface")
 				context.services.computeServer.computeServerInterface.save(network)
 			}
 		}
@@ -1166,31 +1185,31 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				server.sourceImage = virtualImage
 				def rootVolume = server.volumes?.find { it.rootVolume == true }
 				def maxStorage = rootVolume.maxStorage
-				def dataDisks = server?.volumes?.findAll{it.rootVolume == false}?.sort{it.id}
+				def dataDisks = server?.volumes?.findAll { it.rootVolume == false }?.sort { it.id }
 				server.osDevice = '/dev/vda'
 				server.dataDevice = dataDisks?.size() > 0 ? '/dev/vdb' : '/dev/vda'
 				opts.server.lvmEnabled = dataDisks?.size() > 0
 				opts.createUserList = opts.userConfig.createUsers
 				opts.server.sshUsername = opts.userConfig.sshUsername
 				opts.server.sshPassword = opts.userConfig.sshPassword
-				opts.sshKey  = opts.userConfig.primaryKey
+				opts.sshKey = opts.userConfig.primaryKey
 				def createOpts = [
-						account		: account,
-						name		: server.name,
-						maxStorage	: maxStorage,
-						imageId		: imageId,
-						server		: server,
-						zone		: cloud,
-						dataDisks	: dataDisks,
-						externalId	: server.externalId,
-						zoneRef		: server.cloud,
-						noAgent		: (opts.config?.containsKey("noAgent") == true && opts.config.noAgent == true),
+						account     : account,
+						name        : server.name,
+						maxStorage  : maxStorage,
+						imageId     : imageId,
+						server      : server,
+						zone        : cloud,
+						dataDisks   : dataDisks,
+						externalId  : server.externalId,
+						zoneRef     : server.cloud,
+						noAgent     : (opts.config?.containsKey("noAgent") == true && opts.config.noAgent == true),
 						installAgent: (opts.config?.containsKey("noAgent") == false || (opts.config?.containsKey("noAgent") && opts.config.noAgent != true)),
-						username	: opts.server.sshUsername,
-						password	: opts.userConfig.sshPassword,
-						imageRef	: imageId,
-						sshKey		: opts.sshKey,
-						userData	: null,
+						username    : opts.server.sshUsername,
+						password    : opts.userConfig.sshPassword,
+						imageRef    : imageId,
+						sshKey      : opts.sshKey,
+						userData    : null,
 						rootVolume  : rootVolume
 				]
 				//cloud init config
@@ -1203,8 +1222,8 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				createOpts.platform = createOpts.osType
 				createOpts.userConfig = hostRequest.usersConfiguration
 				createOpts.serverInterfaces = server.interfaces
-						
-				if(plan.internalId == 'custom') {
+
+				if (plan.internalId == 'custom') {
 					createOpts.maxMemory = server.maxMemory ?: plan.maxMemory
 					createOpts.maxCores = server.maxCores ?: plan.maxCores
 					createOpts.maxCpu = server.maxCores ?: plan.maxCores
@@ -1212,7 +1231,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					createOpts.planRef = plan.externalId
 				}
 
-				if(virtualImage?.isCloudInit) {
+				if (virtualImage?.isCloudInit) {
 					def cloudConfigOpts = hostRequest?.cloudConfigOpts ?: null
 					opts.installAgent = (cloudConfigOpts.installAgent != true)
 
@@ -1225,7 +1244,52 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				context.async.computeServer.save(server).blockingGet()
 				//create it
 				log.debug("create server: ${createOpts}")
-				runVirtualMachine(createOpts, provisionResponse, hostRequest, opts)
+				def authConfig = plugin.getAuthConfig(cloud)
+				def createResults = findOrCreateServer(cloud, createOpts)
+				log.debug("create server: ${createResults}")
+				if (createResults.success == true) {
+					def instance = createResults.server
+					if (instance) {
+						server.externalId = createResults.externalId
+						server.sshPassword = createResults.server.password
+						morpheus.async.computeServer.save(server).blockingGet()
+						def statusResults = UpcloudApiService.waitForServerExists(authConfig, createResults.externalId)
+						log.debug("status results: ${statusResults.success}")
+						if (statusResults.success == true) {
+							def serverDetails = UpcloudApiService.getServerDetail(authConfig, createResults.externalId)
+							if (serverDetails.success == true) {
+								//fill in ip address.
+								setRootVolumeInfo(rootVolume, createOpts.platform, serverDetails.volumes)
+								setVolumeInfo(dataDisks, serverDetails.volumes)
+								setNetworkInfo(server.interfaces.serverInterfaces, serverDetails.networks)
+								//update network info
+								def privateIp = serverDetails.server.'ip_addresses'?.'ip_address'?.find { it.family == 'IPv4' && it.access == 'utility' }
+								def publicIp = serverDetails.server.'ip_addresses'?.'ip_address'?.find { it.family == 'IPv4' && it.access == 'public' }
+								//update network info
+								applyComputeServerNetworkIp(server, privateIp?.address, publicIp?.address, null, null, 0)
+								server.osDevice = '/dev/vda'
+								server.dataDevice = dataDisks?.size() > 0 ? '/dev/vdb' : '/dev/vda'
+								server.lvmEnabled = dataDisks?.size() > 0
+								server.managed = true
+								server.sshHost = privateIp?.address ?: publicIp?.address
+								server.capacityInfo = new ComputeCapacityInfo(maxCores: plan.maxCpu,
+										maxMemory: plan.maxMemory, maxStorage: plan.maxStorage)
+								morpheus.async.computeServer.save(server).blockingGet()
+								return new ServiceResponse<ProvisionResponse>(success: true, data: provisionResponse)
+							} else {
+								return new ServiceResponse(success: false, msg: serverDetails.message ?: 'Error loading server details', error: serverDetails.message, data: provisionResponse)
+							}
+						} else {
+							return new ServiceResponse(success: false, msg: statusResults.message ?: 'Error getting server status', error: statusResults.message, data: provisionResponse)
+						}
+					} else {
+						return new ServiceResponse(success: false, msg: provisionResponse.message ?: 'Error loading created server', error: provisionResponse.message, data: provisionResponse)
+					}
+				} else {
+					return new ServiceResponse(success: false, msg: createResults.message ?: 'Error creating server', error: createResults.message, data: provisionResponse)
+				}
+				
+				//runVirtualMachine(createOpts, provisionResponse, hostRequest, opts)
 			} else {
 				server.statusMessage = 'Image not found'
 			}
@@ -1241,6 +1305,29 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		}
 	}
 
+	def findOrCreateServer(Cloud cloud, Map serverConfig) {
+		def rtn = [success:false]
+		def found = false
+		log.info("findOrCreateServer:${serverConfig.externalId}")
+		def authConfig = plugin.getAuthConfig(cloud)
+		if(serverConfig.externalId) {
+			def serverDetail = UpcloudApiService.getServerDetail(authConfig, serverConfig.externalId)
+			log.info("got serverdetail:${serverDetail}")
+			if(serverDetail.success == true && (serverDetail.data?.server?.state == 'started' ||
+					serverDetail.data?.server?.state == 'stopped' ||
+					serverDetail.data?.server?.state == 'maintenance')) {
+				found = true
+				rtn.success = true
+				rtn.server = serverDetail.data?.server
+			}
+		}
+		if(found == true) {
+			return rtn
+		} else {
+			return UpcloudApiService.createServer(authConfig, serverConfig)
+		}
+	}
+	
 	ServiceResponse resizeWorkload(Instance instance, Workload workload, ResizeRequest resizeRequest, Map opts) {
 		def server = morpheus.async.computeServer.get(workload.server.id).blockingGet()
 		if(server) {
@@ -1312,7 +1399,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					server.plan = plan
 					server.maxMemory = requestedMemory.toLong()
 					server.maxCores = (requestedCores ?: 1).toLong()
-					server.setConfig('maxMemory', plan.maxMemory)
+					server.setConfigProperty('maxMemory', plan.maxMemory)
 					server = saveAndGet(server)
 				} else {
 					throw new Exception('error on resize ' + (resizeResults.msg ?: ''))
@@ -1329,14 +1416,14 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 			resizeRequest.volumesAdd?.each { newVolumeProps ->
 				// new disk add it
-				log.debug("Adding New Volume")
+				log.debug("Adding New Volume: ${newVolumeProps}")
 				//new disk add it
 				if (!newVolumeProps.maxStorage) {
 					newVolumeProps.maxStorage = newVolumeProps.size ? (newVolumeProps.size.toDouble() * ComputeUtility.ONE_GIGABYTE).toLong() : 0
 				}
 
 				def zoneRef = server.cloud.getConfigMap().zone
-				def addDiskConfig = [name: newVolumeProps.name, zoneRef: zoneRef, serverName: server.name, maxStorage: newVolumeProps.volume.maxStorage]
+				def addDiskConfig = [name: newVolumeProps.name, zoneRef: zoneRef, serverName: server.name, maxStorage: newVolumeProps.maxStorage]
 				def addDiskResults = UpcloudApiService.createStorage(client, authConfigMap, addDiskConfig)
 				log.debug("addDiskResults ${addDiskResults}")
 

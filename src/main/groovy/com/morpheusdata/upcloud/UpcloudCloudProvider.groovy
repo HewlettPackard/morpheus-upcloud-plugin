@@ -617,4 +617,8 @@ class UpcloudCloudProvider implements CloudProvider {
 	String getName() {
 		return 'UpCloud'
 	}
+	
+	static Boolean hasSecurityGroups() {
+		return false
+	}
 }
