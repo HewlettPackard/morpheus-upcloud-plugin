@@ -85,9 +85,9 @@ class PublicTemplatesSync {
                     ]
 
                 imageConfig.osType = new OsType(code:(cloudItem.title.startsWith("Windows ") ? 'windows' : 'linux'))
-                if(imageConfig.platform == 'windows') {
-                    imageConfig.sshUsername = 'clouduser'
-                }
+//                if(imageConfig.platform == 'windows') {
+//                    imageConfig.sshUsername = 'clouduser'
+//                }
 
                 def newImage = new VirtualImage(imageConfig)
                 saves << newImage
@@ -132,9 +132,9 @@ class PublicTemplatesSync {
                             existingItem.osType = new OsType(code:template.title.startsWith("Windows ") ? 'windows' : 'linux')
                             save = true
                         }
-                        if(existingItem.platform == 'windows' && !existingItem.sshUsername) {
-                            existingItem.sshUsername = 'clouduser'
-                        }
+//                        if(existingItem.platform == 'windows' && !existingItem.sshUsername) {
+//                            existingItem.sshUsername = 'clouduser'
+//                        }
                         if(workloadType) {
                             if(workloadType.commEnabled != layoutMatch.commEnabled) {
                                 workloadType.commEnabled = layoutMatch.commEnabled
@@ -192,25 +192,30 @@ class PublicTemplatesSync {
 
         removeList?.each { VirtualImageIdentityProjection morpheusItem ->
             VirtualImage virtualImage = morpheusContext.async.virtualImage.get(morpheusItem.id).blockingGet()
-            def workloadTypes = morpheusContext.services.workloadType.list(
+            def workloadTypes = morpheusContext.async.workloadType.list(
                     new DataQuery().withFilter("virtualImage.id", "=", virtualImage.id)
-            )
+            ).toList().blockingGet()
+            
             workloadTypes?.each {
                 it.virtualImage = null
             }
-            morpheusContext.services.workloadType.bulkSave(workloadTypes)
-            workloadTypes?.findAll{it.code.startsWith("upcloud.layout.public.template")}?.toArray().each { ctype ->
+            morpheusContext.async.workloadType.bulkSave(workloadTypes).blockingGet()
+            workloadTypes?.findAll{it.code.startsWith("upcloud.layout.public.template")}?.each { ctype ->
+                log.debug("line 207: ${ctype.name}, ${ctype.id}")
                 morpheusContext.async.workload.typeSet.list(
                     new DataQuery().withFilter("workloadType.id", "=", ctype.id)
-                ).toList().each{ WorkloadTypeSet cset ->
-                    morpheusContext.services.instanceTypeLayout.list(
-                        new DataQuery().withFilter("workloads.id", "=", cset.id)
-                    ).toList().each{layout ->
-                        morpheusContext.services.instance.list(
-                                new DataQuery().withFilter("layout.id", "=", layout.id)
-                        ).toList().each {instance ->
-                                instance.layout = null
-                                morpheusContext.async.instance.save(instance).blockingGet()
+                ).toList().blockingGet().each{ cset ->
+                    log.debug("line 211, cset: ${cset.code}, ${cset.id}")
+                    morpheusContext.async.instanceTypeLayout.list(
+                        new DataQuery().withFilter("workloads", "=", cset)
+                    ).toList().blockingGet().each{layout ->
+                        log.debug("line 215, layout: ${layout.code}, ${layout.id}")
+                        morpheusContext.async.instance.list(
+                            new DataQuery().withFilter("layout.id", "=", layout.id)
+                        ).toList().blockingGet().each {instance ->
+                            log.debug("line 219, instance: ${instance.name}, ${instance.id}")
+                            instance.layout = null
+                            morpheusContext.async.instance.save(instance).blockingGet()
                         }
                         layoutDeletes << layout
                     }
@@ -221,6 +226,10 @@ class PublicTemplatesSync {
             imageDeletes << virtualImage
         }
 
+        log.debug("layoutDeletes: ${layoutDeletes}")
+        log.debug("setDeletes: ${setDeletes}")
+        log.debug("typeDeletes: ${typeDeletes}")
+        log.debug("imageDeletes: ${imageDeletes}")
         morpheusContext.async.instanceTypeLayout.bulkRemove(layoutDeletes).blockingGet()
         morpheusContext.async.workload.typeSet.bulkRemove(setDeletes).blockingGet()
         morpheusContext.async.workloadType.bulkRemove(typeDeletes).blockingGet()
