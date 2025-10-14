@@ -923,7 +923,6 @@ class UpcloudApiService {
         }
 
         requestOptions.headers['Content-Type'] = 'application/json'
-        log.info("client in callApi: ${client.dump()}")
         ServiceResponse response = client.callJsonApi(apiUrl, apiPath, username, password, requestOptions, method)
         return response
     }

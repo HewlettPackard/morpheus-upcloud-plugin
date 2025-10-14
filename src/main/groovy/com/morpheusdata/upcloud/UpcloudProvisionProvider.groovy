@@ -73,7 +73,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			true, // successful
 			'', // no message
 			null, // no errors
-			new PrepareWorkloadResponse(workload:workload) // adding the workload to the response for convenience
+			new PrepareWorkloadResponse(workload:workload, options: [sendIp: false]) // adding the workload to the response for convenience
 		)
 		return resp
 	}
@@ -444,9 +444,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 							provisionResponse.createUsers = runConfig.userConfig.createUsers
 
 							runVirtualMachine(runConfig, provisionResponse, workloadRequest, opts)
-							def tempServer = morpheus.services.computeServer.get(server.id)
-							log.info("after run virtual machine, getting server interfaces: ${tempServer.interfaces}")
-							log.info("after run virtual machine, getting server private ip: ${tempServer.internalIp}")
 						} else {
 							provisionResponse.setError(imageUploadResults.message)
 							return new ServiceResponse(success: false, msg: imageUploadResults.message, e: null, data: provisionResponse)
@@ -826,12 +823,12 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					def publicIp = serverDetails.server.'ip_addresses'?.'ip_address'?.find {
 						it.family == 'IPv4' && it.access == 'public'
 					}
-					log.info("calling apply new session compute server network in insert vm")
 					applyNewSessionComputeServerNetwork(server.id, privateIp.address, publicIp?.address, null, null, [:], 0)
 					
+					provisionResponse.privateIp = privateIp.address
+					provisionResponse.publicIp = publicIp.address
 					server = context.async.computeServer.get(server.id).blockingGet()
-					log.info("after apply new session compute server network in insert vm, getting server: ${server.dump()}")
-					log.info("after apply new session compute server network in insert vm, getting server interfaces: ${server.interfaces}")
+					log.debug("after apply new session compute server network in insert vm, getting server: ${server.dump()}")
 
 					taskResults.server = createResults.server
 					taskResults.success = true
@@ -845,27 +842,15 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		} else {
 			taskResults.message = createResults.msg
 		}
-		log.info("insertVm taskResults: ${taskResults}")
-		log.info("insertVm task server interfaces: ${taskResults.server.interfaces}")
 		
 		return taskResults
 
 	}
 
 	def finalizeVm(Map runConfig, ProvisionResponse provisionResponse, Map runResults) {
-		log.info("runconfig: ${runConfig}")
-		log.debug("runTask onComplete: provisionResponse: ${provisionResponse.dump()}")
 		ComputeServer server = context.async.computeServer.get(runConfig.serverId).blockingGet()
-		log.info("finalizeVm server: ${server.dump()}")
-		log.info("server private ip: ${server.internalIp}")
-		log.info("finalizeVm server interfaces: ${server.interfaces}")
-		server.interfaces.each { netInt ->
-			log.info("Net Interface: ${netInt.id} -> Network: ${netInt.network?.id}")
-			log.info("addresses: ${netInt.addresses}")
-			netInt.addresses.each { addr ->
-				log.info("address: ${addr.address} / ${addr.type}")
-			}
-		}
+		log.debug("finalizeVm server: ${server.dump()}")
+		
 		try {
 			if(provisionResponse.success == true) {
 				server.status = 'provisioned'
@@ -876,15 +861,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 				server.managed = true
 				server.capacityInfo = new ComputeCapacityInfo(maxCores:server.plan?.maxCores ?: 1, maxMemory:server.plan?.maxMemory ?: ComputeUtility.ONE_GIGABYTE, maxStorage:runConfig.maxStorage)
 				server = saveAndGet(server)
-				log.info("server interfaces at end of finalize: ${server.interfaces}")
-				log.info("server private ip at end of finalize: ${server.internalIp}")
-				server.interfaces.each { netInt ->
-					log.info("Net Interface: ${netInt.id} -> Network: ${netInt.network?.id}")
-					log.info("addresses: ${netInt.addresses}")
-					netInt.addresses.each { addr ->
-						log.info("address: ${addr.address} / ${addr.type}")
-					}
-				}
 			}
 		} catch(e) {
 			log.error("finalizeVm error: ${e}", e)
@@ -893,12 +869,8 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	}
 
 	protected ComputeServer saveAndGet(ComputeServer server) {
-		log.info("in save and get, before saving server with interfaces: ${server.interfaces}")
-		log.info("in save and get, before saving server with internal ip: ${server.internalIp}")
 		def saveSuccessful = context.async.computeServer.save([server]).blockingGet()
 		server = context.async.computeServer.get(server.id).blockingGet()
-		log.info("in save and get, after saving server with interfaces: ${server.interfaces}")
-		log.info("in save and get, after saving server with internal ip: ${server.internalIp}")
 
 		if(!saveSuccessful) {
 			log.warn("Error saving server: ${server?.id}" )
@@ -995,11 +967,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		}
 		rtn = applyComputeServerNetworkIp(server, privateIp, publicIp, hostname, networkPoolId, index, networkOpts)
 		server = context.async.computeServer.get(serverId).blockingGet()
-		log.info("getting server internal ip on 973: ${server.internalIp}")
-		log.info("getting server interfaces on 973: ${server.interfaces}")
 		context.services.computeServer.save(server)
-		log.info("getting server internal ip on 976: ${server.internalIp}")
-		log.info("getting server interfaces on 976: ${server.interfaces}")
 
 		return rtn
 	}
@@ -1010,7 +978,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		def network
 		if(privateIp) {
 			privateIp = privateIp?.toString().contains("\n") ? privateIp.toString().replace("\n", "") : privateIp.toString()
-			log.info("private ip: ${privateIp}")
 			def newInterface = false
 			server.internalIp = privateIp
 			server.sshHost = privateIp
@@ -1032,12 +999,8 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			if(network == null) {
 				log.debug("network 953: creating new interface with privateIp: ${privateIp} and external id ${networkOpts.externalId}")
 				def interfaceName = server.sourceImage?.interfaceName ?: 'eth0'
-				log.info("creating new interface with name: ${interfaceName}")
 				network = new ComputeServerInterface(name:interfaceName, ipAddress:privateIp, primaryInterface:true,
 						displayOrder:(server.interfaces?.size() ?: 0) + 1)
-				log.debug("new network: ${network.dump()}")
-				log.debug("new network addresses: ${network.addresses}")
-				log.debug("getting addresses.address: ${network.addresses[0].address}")
 				if(network.addresses && !(privateIp in network.addresses.address)) {
 					log.debug("creating new network address")
 					network.addresses += new NetAddress(type: NetAddress.AddressType.IPV4, address: privateIp)
@@ -1067,37 +1030,21 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 					network[key] = value
 				}
 			}
-			log.info("server internal ip before save 1032: ${server.internalIp}")
-			log.info("network addresses before save 1033")
-			network.addresses?.each { addr ->
-				log.info("network address: ${addr.address}")
-			}
+
 			if (newInterface == true) {
-				log.info("creating new interface")
 //				def tempNetwork = context.services.computeServer.computeServerInterface.create(network)
 //				log.info("adding new interface to server")
 				context.async.computeServer.computeServerInterface.create([network], server).blockingGet()
-				log.info("server interfaces 1060: ${server.interfaces}")
-				log.info("server internal ip 1060: ${server.internalIp}")
-				
 				server = context.async.computeServer.get(server.id).blockingGet()
-				log.info("server interfaces 1054: ${server.interfaces}")
-				log.info("server internal ip 1054: ${server.internalIp}")
-
 //				server.interfaces.add(network)
 //				context.async.computeServer.save(server).blockingGet()
 
-				log.info("created new interface")
 			} else {
-				log.info("saving existing interface")
 				context.services.computeServer.computeServerInterface.save(network)
 			}
 		}
-		log.info("server interfaces 1071: ${server.interfaces}")
-		log.info("server internal ip 1071: ${server.internalIp}")
+
 		server = saveAndGet(server)
-		log.info("server interfaces 1071: ${server.interfaces}")
-		log.info("server internal ip 1071: ${server.internalIp}")
 		return network
 	}
 
@@ -1194,8 +1141,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			// don't think this used
 			// runConfig.template = runConfig.imageId
 			def runResults = insertVm(runConfig, provisionResponse, workloadRequest, opts)
-			log.info("runResults: ${runResults}")
-			log.info("provision response 1198: ${provisionResponse.dump()}")
 			if(provisionResponse.success) {
 				finalizeVm(runConfig, provisionResponse, runResults)
 			}
@@ -1330,7 +1275,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 								def privateIp = serverDetails.server.'ip_addresses'?.'ip_address'?.find { it.family == 'IPv4' && it.access == 'utility' }
 								def publicIp = serverDetails.server.'ip_addresses'?.'ip_address'?.find { it.family == 'IPv4' && it.access == 'public' }
 								//update network info
-								log.info("calling apply compute server network ip in runHost")
 								applyComputeServerNetworkIp(server, privateIp?.address, publicIp?.address, null, null, 0)
 								server.osDevice = '/dev/vda'
 								server.dataDevice = dataDisks?.size() > 0 ? '/dev/vdb' : '/dev/vda'
@@ -1373,11 +1317,9 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 	def findOrCreateServer(Cloud cloud, Map serverConfig) {
 		def rtn = [success:false]
 		def found = false
-		log.info("findOrCreateServer:${serverConfig.externalId}")
 		def authConfig = plugin.getAuthConfig(cloud)
 		if(serverConfig.externalId) {
 			def serverDetail = UpcloudApiService.getServerDetail(authConfig, serverConfig.externalId)
-			log.info("got serverdetail:${serverDetail}")
 			if(serverDetail.success == true && (serverDetail.data?.server?.state == 'started' ||
 					serverDetail.data?.server?.state == 'stopped' ||
 					serverDetail.data?.server?.state == 'maintenance')) {

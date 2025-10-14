@@ -266,7 +266,6 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse validate(Cloud cloudInfo, ValidateCloudRequest validateCloudRequest) {
-		log.info("validating cloud info: ${cloudInfo.dump()} with request: ${validateCloudRequest.dump()}")
 		try {
 			if(cloudInfo) {
 				def username

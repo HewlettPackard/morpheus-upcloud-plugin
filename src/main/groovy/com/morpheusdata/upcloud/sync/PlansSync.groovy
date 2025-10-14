@@ -37,7 +37,7 @@ class PlansSync {
     }
 
     def execute() {
-        log.info("SYNCING PLANS")
+        log.debug("SYNCING PLANS")
         try {
             def authConfig = plugin.getAuthConfig(cloud)
             def planListResults = UpcloudApiService.listPlans(client, authConfig)

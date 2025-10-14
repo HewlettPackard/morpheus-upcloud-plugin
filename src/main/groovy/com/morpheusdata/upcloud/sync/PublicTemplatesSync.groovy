@@ -34,7 +34,7 @@ class PublicTemplatesSync {
     }
 
     def execute() {
-        log.info("SYNCING PUBLIC TEMPLATES")
+        log.debug("SYNCING PUBLIC TEMPLATES")
         try {
             def authConfig = plugin.getAuthConfig(cloud)
             def imageResults = UpcloudApiService.listPublicTemplates(client, authConfig)

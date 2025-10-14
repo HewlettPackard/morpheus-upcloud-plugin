@@ -27,7 +27,7 @@ class UserImagesSync {
     }
 
     def execute() {
-        log.info("SYNCING USER IMAGES")
+        log.debug("SYNCING USER IMAGES")
         try {
             def authConfig = plugin.getAuthConfig(cloud)
             log.debug("authConfig: ${authConfig}")

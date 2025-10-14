@@ -42,7 +42,7 @@ class VirtualMachinesSync {
     }
 
     def execute() {
-        log.info("SYNCING VIRTUAL MACHINES")
+        log.debug("SYNCING VIRTUAL MACHINES")
         try {
             def inventoryLevel = cloud.inventoryLevel ?: (cloud.getConfigProperty('importExisting') in [true, 'true', 'on'] ? 'basic' : 'off')
             def authConfig = plugin.getAuthConfig(cloud)
@@ -239,15 +239,6 @@ class VirtualMachinesSync {
                             }
                         }
                         
-                        log.info("in vm sync 242: server.internalIp: ${server.internalIp}, server.externalIp: ${server.externalIp}, server.sshHost: ${server.sshHost}")
-                        log.info("in vm sync 242: network interfaces: ${server.interfaces}")
-                        server.interfaces.each { netInt ->
-                            log.info("Net Interface: ${netInt.id} -> Network: ${netInt.network?.id}")
-                            log.info("addresses: ${netInt.addresses}")
-                            netInt.addresses.each { addr ->
-                                log.info("address: ${addr.address} / ${addr.type}")
-                            }
-                        }
                         //volumes
                         if (serverResults.volumes) {
                             def maxStorage = serverResults.volumes.sum { volume -> (volume.size ? (volume.size.toLong() * ComputeUtility.ONE_GIGABYTE) : 0) }
