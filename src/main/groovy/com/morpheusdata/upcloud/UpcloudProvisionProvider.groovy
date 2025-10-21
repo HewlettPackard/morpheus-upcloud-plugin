@@ -1,9 +1,11 @@
 package com.morpheusdata.upcloud
 
+import com.morpheusdata.PrepareHostResponse
 import com.morpheusdata.core.AbstractProvisionProvider
 import com.morpheusdata.core.MorpheusContext
 import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.data.DataQuery
+import com.morpheusdata.core.providers.HostProvisionProvider
 import com.morpheusdata.core.providers.ProvisionProvider
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
@@ -31,6 +33,7 @@ import com.morpheusdata.model.StorageVolumeType
 import com.morpheusdata.model.VirtualImage
 import com.morpheusdata.model.Workload
 import com.morpheusdata.model.WorkloadType
+import com.morpheusdata.model.projection.DatastoreIdentityProjection
 import com.morpheusdata.model.provisioning.HostRequest
 import com.morpheusdata.model.provisioning.NetworkConfiguration
 import com.morpheusdata.model.provisioning.WorkloadRequest
@@ -44,7 +47,7 @@ import groovy.util.logging.Slf4j
 import org.apache.tools.ant.types.spi.Service
 
 @Slf4j
-class UpcloudProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, ProvisionProvider.BlockDeviceNameFacet {
+class UpcloudProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, HostProvisionProvider.ResizeFacet {
 	public static final String PROVISION_PROVIDER_CODE = 'upcloud.provision'
 
 	protected MorpheusContext context
@@ -1348,24 +1351,56 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		return internalResizeServer(server, resizeRequest)
 	}
 
-	def buildStorageVolume(computeServer, volumeAdd, addDiskResults, newCounter) {
-		def newVolume = new StorageVolume(
-				refType		: 'ComputeZone',
-				refId		: computeServer.cloud.id,
-				regionCode	: computeServer.region?.regionCode,
-				account		: computeServer.account,
-				maxStorage	: volumeAdd.maxStorage?.toLong(),
-				maxIOPS		: volumeAdd.maxIOPS?.toInteger(),
-				externalId	: addDiskResults.volume?.uuid,
-				internalId 	: addDiskResults.volume?.uuid, // This is used in embedded
-				deviceName	: addDiskResults.volume?.deviceName,
-				name		: volumeAdd.name,
-				displayOrder: newCounter,
-				status		: 'provisioned',
-				unitNumber	: addDiskResults.volume?.deviceIndex?.toString(),
-				deviceDisplayName : getDiskDisplayName(newCounter)
-		)
-		return newVolume
+//	def buildStorageVolume(computeServer, volumeAdd, addDiskResults, newCounter) {
+//		def newVolume = new StorageVolume(
+//				refType		: 'ComputeZone',
+//				refId		: computeServer.cloud.id,
+//				regionCode	: computeServer.region?.regionCode,
+//				account		: computeServer.account,
+//				maxStorage	: volumeAdd.maxStorage?.toLong(),
+//				maxIOPS		: volumeAdd.maxIOPS?.toInteger(),
+//				externalId	: addDiskResults.volume?.uuid,
+//				internalId 	: addDiskResults.volume?.uuid, // This is used in embedded
+//				deviceName	: addDiskResults.volume?.deviceName,
+//				name		: volumeAdd.name,
+//				displayOrder: newCounter,
+//				status		: 'provisioned',
+//				unitNumber	: addDiskResults.volume?.deviceIndex?.toString(),
+//				deviceDisplayName : getDiskDisplayName(newCounter)
+//		)
+//		return newVolume
+//	}
+
+	StorageVolume buildStorageVolume(Account account, locationOrServer, volume, index, size = null) {
+		log.debug "buildStorageVolume: ${account} ${locationOrServer} ${volume} ${index}"
+		StorageVolume storageVolume = new StorageVolume()
+		storageVolume.name = volume.name
+		storageVolume.account = account
+		storageVolume.maxStorage = size?.toLong() ?: volume.maxStorage?.toLong() ?: volume.size?.toLong() ?: 0l
+		if(volume.storageType) {
+			String storageTypeCode = context.async.storageVolume.storageVolumeType.get(volume.storageType?.toLong()).blockingGet()
+			log.info("STORAGE TYPE CODE: ${storageTypeCode}")
+			storageVolume.type = new StorageVolumeType(code: storageTypeCode)
+		} else
+			storageVolume.type = new StorageVolumeType(code: 'upcloudVolume')
+		if(volume.externalId)
+			storageVolume.externalId = volume.externalId
+		if(volume.internalId)
+			storageVolume.internalId = volume.internalId
+		if(volume.unitNumber)
+			storageVolume.unitNumber = volume.unitNumber
+		if(volume.datastoreId) {
+			storageVolume.datastore = new DatastoreIdentityProjection(id: volume.datastoreId.toLong())
+		}
+		if(volume.datastore) {
+			storageVolume.datastore = volume.datastore
+		}
+		storageVolume.rootVolume = volume.rootVolume == true
+		storageVolume.removable = storageVolume.rootVolume != true
+		storageVolume.displayOrder = volume.displayOrder ?: locationOrServer?.volumes?.size() ?: 0
+		storageVolume.diskIndex = index
+		log.info("storage volume: ${storageVolume.dump()}")
+		return storageVolume
 	}
 
 	def internalResizeServer(ComputeServer server, ResizeRequest resizeRequest, Map opts = [:]) {
@@ -1450,11 +1485,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 				def containerServer = morpheus.services.computeServer.get(server.id)
 				def volumeType = allStorageVolumeTypes[newVolumeProps.storageType.toLong()] // 'upcloudVolume'
-				def newVolume = buildStorageVolume(containerServer.account, containerServer, newVolumeProps.volume, newCounter)
+				def newVolume = buildStorageVolume(containerServer.account, containerServer, addDiskResults.data.storage, newCounter)
 				def deviceName =  getDiskName(newCounter)
 				def deviceAddress = attachResults.address ?: deviceName
 				newVolume.type = volumeType
-				newVolume.maxStorage = newVolumeProps.volume.maxStorage
+				newVolume.maxStorage = newVolumeProps.maxStorage
 				newVolume.externalId = newVolumeId
 				newVolume.internalId = deviceAddress
 				newVolume.deviceName = deviceName
@@ -1512,7 +1547,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 
 					def containerServer = morpheus.services.computeServer.get(server.id)
 					def volumeType = allStorageVolumeTypes[updateProps.storageType.toLong()] // 'upcloudVolume'
-					def newVolume = buildStorageVolume(containerServer.account, containerServer, updateProps.volume, newCounter)
+					def newVolume = buildStorageVolume(containerServer.account, containerServer, addDiskResults.data.storage, newCounter)
 					def deviceName = getDiskName(newCounter)
 					def deviceAddress = attachResults.address ?: deviceName
 					newVolume.type = volumeType

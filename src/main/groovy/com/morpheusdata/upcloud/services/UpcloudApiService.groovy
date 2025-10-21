@@ -906,6 +906,7 @@ class UpcloudApiService {
         log.debug("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${opts}")
 
         RequestOptions requestOptions = new RequestOptions(headers: [:])
+        requestOptions.readTimeout = requestTimeout
         if(opts.body) {
            requestOptions.body = opts.body
         }
