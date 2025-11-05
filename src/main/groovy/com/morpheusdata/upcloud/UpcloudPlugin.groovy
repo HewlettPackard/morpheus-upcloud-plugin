@@ -48,7 +48,12 @@ class UpcloudPlugin extends Plugin {
     void onDestroy() {
         List<String> seedsToRun = [
                 "application.UpCloudZoneTypeSeed",
-                "application.ProvisionTypeUpcloudSeed",
+                "application.ProvisionTypeUpcloud",
+                "application.UpCloudSeed",
+                "application.UpcloudComputeTypeSeed",
+                "application.UpcloudStorageVolumeTypeSeed",
+                "application.ComputeServerTypeUpcloudSeed",
+                "application.ProvisionTypeSeed"
         ]
         this.morpheus.services.seed.reinstallSeedData(seedsToRun)
         // needs to be synchronous to prevent seeds from running during plugin install

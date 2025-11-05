@@ -48,7 +48,8 @@ class UpcloudCloudRegionDatasetProvider extends AbstractDatasetProvider<CloudReg
     Class<CloudRegion> getItemType() {
         return CloudRegion.class
     }
-
+    
+    @Override
     Observable<CloudRegion> list(DatasetQuery query) {
         Map authConfig = plugin.getAuthConfig(query.parameters)
         if(authConfig.username == null) {
@@ -67,11 +68,13 @@ class UpcloudCloudRegionDatasetProvider extends AbstractDatasetProvider<CloudReg
         return Observable.empty()
     }
 
+    @Override
     Observable<CloudRegion> listOptions(DatasetQuery query) {
         log.debug("LIST OPTIONS 64: ${query}")
         return list(query).map { [name: it.description, value: it.id] }
     }
 
+    @Override
     CloudRegion fetchItem(Object value) {
         def rtn = null
         if(value instanceof Long) {
@@ -85,15 +88,18 @@ class UpcloudCloudRegionDatasetProvider extends AbstractDatasetProvider<CloudReg
         return rtn
     }
 
+    @Override
     CloudRegion item(Long value) {
         def rtn = list(new DatasetQuery()).find{ it.id == value }
         return rtn
     }
 
+    @Override
     String itemName(CloudRegion item) {
         return item.name
     }
 
+    @Override
     Long itemValue(CloudRegion item) {
         return (Long)item.id
     }

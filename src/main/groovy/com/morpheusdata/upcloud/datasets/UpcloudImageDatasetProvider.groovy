@@ -69,6 +69,7 @@ class UpcloudImageDatasetProvider extends AbstractDatasetProvider<VirtualImage, 
         return rtn
     }
 
+    @Override
     VirtualImage item(Long value) {
         return morpheus.services.virtualImage.get(value)
     }
