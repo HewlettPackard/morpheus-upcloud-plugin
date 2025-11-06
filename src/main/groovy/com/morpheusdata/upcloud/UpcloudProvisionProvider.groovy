@@ -7,6 +7,7 @@ import com.morpheusdata.core.Plugin
 import com.morpheusdata.core.data.DataQuery
 import com.morpheusdata.core.providers.HostProvisionProvider
 import com.morpheusdata.core.providers.ProvisionProvider
+import com.morpheusdata.core.providers.VmProvisionProvider
 import com.morpheusdata.core.providers.WorkloadProvisionProvider
 import com.morpheusdata.core.util.ComputeUtility
 import com.morpheusdata.core.util.HttpApiClient
@@ -41,13 +42,11 @@ import com.morpheusdata.request.ResizeRequest
 import com.morpheusdata.response.PrepareWorkloadResponse
 import com.morpheusdata.response.ProvisionResponse
 import com.morpheusdata.response.ServiceResponse
-import com.morpheusdata.upcloud.datasets.UpcloudImageDatasetProvider
 import com.morpheusdata.upcloud.services.UpcloudApiService
 import groovy.util.logging.Slf4j
-import org.apache.tools.ant.types.spi.Service
 
 @Slf4j
-class UpcloudProvisionProvider extends AbstractProvisionProvider implements WorkloadProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, HostProvisionProvider.ResizeFacet {
+class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmProvisionProvider, WorkloadProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, HostProvisionProvider.ResizeFacet {
 	public static final String PROVISION_PROVIDER_CODE = 'upcloud.provision'
 
 	protected MorpheusContext context
@@ -1153,6 +1152,55 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 		}
 	}
 
+	@Override
+	ServiceResponse<PrepareHostResponse> prepareHost(ComputeServer server, HostRequest hostRequest, Map opts) {
+		log.debug "prepareHost: ${server} ${hostRequest} ${opts}"
+
+		def prepareResponse = new PrepareHostResponse(computeServer: server, disableCloudInit: false, options: [sendIp: true])
+		ServiceResponse<PrepareHostResponse> rtn = ServiceResponse.prepare(prepareResponse)
+		if (server.sourceImage) {
+			rtn.success = true
+			return rtn
+		}
+
+		try {
+			VirtualImage virtualImage = null
+			Long computeTypeSetId = server.typeSet?.id
+			def config = server.getConfigMap()
+			def imageType = config.templateTypeSelect ?: 'default'
+
+			if (computeTypeSetId) {
+				ComputeTypeSet computeTypeSet = morpheus.async.computeTypeSet.get(computeTypeSetId).blockingGet()
+				if (computeTypeSet.workloadType) {
+					WorkloadType workloadType = morpheus.async.workloadType.get(computeTypeSet.workloadType.id).blockingGet()
+					virtualImage = workloadType.virtualImage
+				}
+			} else if (imageType == 'custom' && config.imageId) {
+				Long virtualImageId = config.imageId?.toLong()
+				if (virtualImageId) {
+					virtualImage = context.services.virtualImage.get(virtualImageId)
+				}
+			} else {
+				// TODO: this is the fallback... should we really do this?
+				virtualImage = context.services.virtualImage.find(new DataQuery().withFilter('code', 'upcloud.image.morpheus.ubuntu.20.04'))
+			}
+
+			if (!virtualImage) {
+				rtn.msg = "No virtual image selected"
+			} else {
+				server.sourceImage = virtualImage
+				saveAndGet(server)
+				rtn.success = true
+			}
+		} catch (e) {
+			rtn.msg = "Error in prepareHost: ${e}"
+			log.error("${rtn.msg}, ${e}", e)
+
+		}
+		return rtn
+	}
+
+
 	ServiceResponse<ProvisionResponse> runHost(ComputeServer server, HostRequest hostRequest, Map opts) {
 		log.debug("runHost server 1090: ${server} ${hostRequest} ${opts}")
 
@@ -1603,5 +1651,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements Work
 			networkProxy.proxyWorkstation = proxyConfiguration.proxyWorkstation
 		}
 		return networkProxy
+	}
+
+	@Override
+	ServiceResponse finalizeHost(ComputeServer server) {
+		return ServiceResponse.success()
 	}
 }
