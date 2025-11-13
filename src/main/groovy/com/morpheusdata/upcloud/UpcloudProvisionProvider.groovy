@@ -1618,11 +1618,18 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 				if(volumeAddress) {
 					def detachResults = UpcloudApiService.detachStorage(client, authConfigMap, server.externalId, volumeAddress)
 					if(detachResults.success == true) {
-						UpcloudApiService.removeStorage(client, authConfigMap, volumeId)
-						morpheus.async.storageVolume.remove([volume], server, true).blockingGet()
+						def removeResults = UpcloudApiService.removeStorage(client, authConfigMap, volumeId)
+						log.debug("removeResults: ${removeResults}")
+						volume = morpheus.services.storage.volume.get(volume.id)
+						server = morpheus.services.computeServer.get(server.id)
+						server.volumes.remove(volume)
+						morpheus.services.computeServer.save(server)
+						morpheus.async.storage.volume.remove([volume], server, true).blockingGet()
+						
 					}
 				}
 			}
+			server = morpheus.services.computeServer.get(server.id)
 			server.status = 'provisioned'
 			server = saveAndGet(server)
 
