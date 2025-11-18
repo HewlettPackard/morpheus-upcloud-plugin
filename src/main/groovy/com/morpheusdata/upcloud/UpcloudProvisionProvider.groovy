@@ -1205,6 +1205,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 		log.debug("runHost server 1090: ${server} ${hostRequest} ${opts}")
 
 		ProvisionResponse provisionResponse = new ProvisionResponse()
+		HttpApiClient client = new HttpApiClient()
+		ProxyConfiguration proxyConfiguration = hostRequest?.proxyConfiguration ?: null
+		client.networkProxy = buildNetworkProxy(proxyConfiguration)
+		
 		try {
 			def config = server.getConfigMap()
 			Cloud cloud = server.cloud
@@ -1228,16 +1232,27 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 						WorkloadType containerType = morpheus.services.workloadType.get(workloadTypeId)
 						Long virtualImageId = containerType.virtualImage.id
 						virtualImage = morpheus.services.virtualImage.get(virtualImageId)
-						def imageLocation = virtualImage?.imageLocations.find{it.refId == cloud.id && it.refType == "ComputeZone"}
-						imageId = imageLocation?.externalId
+//						log.info("virtualImageId: ${virtualImageId} virtualImageCode: ${virtualImage.code}")
+//						log.info("containerType: ${containerType.code}")
+//						log.info("cloud.regionCode: ${cloud.regionCode}")
+//						def imageLocation = morpheus.services.virtualImage.location.find(new DataQuery()
+//								.withFilter('virtualImage.id', virtualImage.id)
+//								.withFilter('refType', 'ComputeZone')
+//								.withFilter('refId', cloud.id)
+//								.withFilter('imageRegion', cloud.regionCode)
+//						)
+//						log.info("imageLocation: ${imageLocation}")
+//						imageId = imageLocation?.externalId
+						imageId = virtualImage.externalId
 					}
 				}
 			}
+			log.debug("virtual image selected: ${virtualImage} with imageId: ${imageId}")
 			if(!virtualImage && imageType == 'custom' && config.imageId) {
 				virtualImage = server.sourceImage
 				imageId = virtualImage.externalId
 			} else if (!virtualImage) {
-				virtualImage  = new VirtualImage(code: 'upcloud.image.morpheus.ubuntu.20.04')
+				virtualImage = context.services.virtualImage.find(new DataQuery().withFilter('code', 'upcloud.image.morpheus.ubuntu.20.04'))
 				imageId = virtualImage.externalId
 			}
 
@@ -1248,11 +1263,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 				def dataDisks = server?.volumes?.findAll { it.rootVolume == false }?.sort { it.id }
 				server.osDevice = '/dev/vda'
 				server.dataDevice = dataDisks?.size() > 0 ? '/dev/vdb' : '/dev/vda'
-				opts.server.lvmEnabled = dataDisks?.size() > 0
-				opts.createUserList = opts.userConfig.createUsers
-				opts.server.sshUsername = opts.userConfig.sshUsername
-				opts.server.sshPassword = opts.userConfig.sshPassword
-				opts.sshKey = opts.userConfig.primaryKey
+				server.lvmEnabled = dataDisks?.size() > 0
+				opts.createUserList = hostRequest.usersConfiguration
+//				opts.server.sshUsername = hostRequest.usersConfiguration.sshUsername
+//				opts.server.sshPassword = hostRequest.usersConfiguration.sshPassword
+//				opts.sshKey = hostRequest.usersConfiguration.primaryKey
 				def createOpts = [
 						account     : account,
 						name        : server.name,
@@ -1262,13 +1277,13 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 						zone        : cloud,
 						dataDisks   : dataDisks,
 						externalId  : server.externalId,
-						zoneRef     : server.cloud,
+						zoneRef     : cloud.regionCode,
 						noAgent     : (opts.config?.containsKey("noAgent") == true && opts.config.noAgent == true),
 						installAgent: (opts.config?.containsKey("noAgent") == false || (opts.config?.containsKey("noAgent") && opts.config.noAgent != true)),
-						username    : opts.server.sshUsername,
-						password    : opts.userConfig.sshPassword,
+						username    : hostRequest.usersConfiguration.sshUsername,
+						password    : hostRequest.usersConfiguration.sshPassword,
 						imageRef    : imageId,
-						sshKey      : opts.sshKey,
+						sshKey      : hostRequest.usersConfiguration.primaryKey,
 						userData    : null,
 						rootVolume  : rootVolume
 				]
@@ -1298,14 +1313,14 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 					def cloudConfigUser = hostRequest?.cloudConfigUser ?: null
 					createOpts.userData = cloudConfigUser
 				}
-
-				provisionResponse.createUsers = opts.userConfig.createUsers
+				
+				provisionResponse.createUsers = hostRequest.usersConfiguration.createUsers
 				log.debug("create opts 1189 in runhost: ${createOpts}")
 				context.async.computeServer.save(server).blockingGet()
 				//create it
 				log.debug("create server: ${createOpts}")
 				def authConfig = plugin.getAuthConfig(cloud)
-				def createResults = findOrCreateServer(cloud, createOpts)
+				def createResults = findOrCreateServer(client, cloud, createOpts)
 				log.debug("create server: ${createResults}")
 				if (createResults.success == true) {
 					def instance = createResults.server
@@ -1313,10 +1328,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 						server.externalId = createResults.externalId
 						server.sshPassword = createResults.server.password
 						morpheus.async.computeServer.save(server).blockingGet()
-						def statusResults = UpcloudApiService.waitForServerExists(authConfig, createResults.externalId)
+						def statusResults = UpcloudApiService.waitForServerExists(client, authConfig, createResults.externalId)
 						log.debug("status results: ${statusResults.success}")
 						if (statusResults.success == true) {
-							def serverDetails = UpcloudApiService.getServerDetail(authConfig, createResults.externalId)
+							def serverDetails = UpcloudApiService.getServerDetail(client, authConfig, createResults.externalId)
 							if (serverDetails.success == true) {
 								//fill in ip address.
 								setRootVolumeInfo(rootVolume, createOpts.platform, serverDetails.volumes)
@@ -1327,6 +1342,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 								def publicIp = serverDetails.server.'ip_addresses'?.'ip_address'?.find { it.family == 'IPv4' && it.access == 'public' }
 								//update network info
 								applyComputeServerNetworkIp(server, privateIp?.address, publicIp?.address, null, null, 0)
+								server = morpheus.async.computeServer.get(server.id).blockingGet()
 								server.osDevice = '/dev/vda'
 								server.dataDevice = dataDisks?.size() > 0 ? '/dev/vdb' : '/dev/vda'
 								server.lvmEnabled = dataDisks?.size() > 0
@@ -1365,7 +1381,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 		}
 	}
 
-	def findOrCreateServer(Cloud cloud, Map serverConfig) {
+	def findOrCreateServer(HttpApiClient client, Cloud cloud, Map serverConfig) {
 		def rtn = [success:false]
 		def found = false
 		def authConfig = plugin.getAuthConfig(cloud)
@@ -1382,7 +1398,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 		if(found == true) {
 			return rtn
 		} else {
-			return UpcloudApiService.createServer(authConfig, serverConfig)
+			return UpcloudApiService.createServer(client, authConfig, serverConfig)
 		}
 	}
 	

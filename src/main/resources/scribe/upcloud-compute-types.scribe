@@ -1,4 +1,4 @@
-//docker host
+//docker host: ubuntu 16.04-disabled
 resource "workload-type" "docker-upcloud-ubuntu-16_04" {
     code             = "docker-upcloud-ubuntu-16.04"
     shortName        = "ubuntu"
@@ -51,6 +51,69 @@ resource "compute-type-layout" "docker-upcloud-ubuntu-16_04-single" {
     groupType         = compute-server-group-type.docker-cluster
     computeServers    = ["docker-upcloud-ubuntu-16.04-set"]
     provisionType     = "upcloud"
+    enabled           = false
+    creatable         = false
+}
+
+//docker host: ubuntu 20.04
+resource "workload-type" "docker-upcloud-ubuntu-20_04" {
+    code             = "docker-upcloud-ubuntu-20.04"
+    shortName        = "ubuntu"
+    name             = "Docker Ubuntu 20.04"
+    ports            = [22]
+    containerVersion = "20.04"
+    repositoryImage  = null
+    imageCode        = "morpheus ubuntu 20.04"
+    entryPoint       = null
+    mountLogs        = "/var/log"
+    statTypeCode     = "server"
+    logTypeCode      = "ubuntu"
+    showServerLogs   = true
+    category         = "ubuntu"
+    cloneType        = "ubuntu"
+    priorityOrder    = 0
+    serverType       = "vm"
+    providerType     = "upcloud"
+    checkTypeCode    = "vmCheck"
+    virtualImage     = virtual-image.upcloud-image-morpheus-ubuntu-20.04
+    osType           = {
+        code = "ubuntu.20.04.64"
+        owner = null
+    }
+    containerPorts   = [{code = "ubuntu.22"}]
+    provisionType    = "upcloud"
+}
+
+resource "compute-type-set" "docker-upcloud-ubuntu-20_04-set" {
+    code                    = "docker-upcloud-ubuntu-20.04-set"
+    name                    = "docker host"
+    workloadType            = workload-type.docker-upcloud-ubuntu-20_04
+    computeServerType       = compute-server-type.upcloud-linux
+    category                = "ubuntu"
+    priorityOrder           = 0
+    dynamicCount            = true
+    nodeCount               = 1
+    nodeType                = "worker"
+    canAddNodes             = true
+    installContainerRuntime = true
+    installStorageRuntime   = true
+}
+
+resource "compute-type-layout" "docker-upcloud-ubuntu-20_04-single" {
+    code              = "docker-upcloud-ubuntu-20.04-single"
+    name              = "UpCloud Docker Host"
+    sortOrder         = 5
+    computeVersion    = "20.04"
+    description       = "This will provision a single docker host vm in upcloud"
+    type              = compute-server-type.upcloud-linux
+    serverCount       = 1
+    memoryRequirement = 1024 * 1024 * 1024
+    hasAutoScale      = false
+    groupType         = compute-server-group-type.docker-cluster
+    computeServers    = ["docker-upcloud-ubuntu-20.04-set"]
+    provisionType     = "upcloud"
+    enabled           = true
+    creatable         = true
 }
 
 //kubernetes master - weave - openebs

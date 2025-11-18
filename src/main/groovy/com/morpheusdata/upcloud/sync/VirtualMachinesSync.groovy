@@ -185,7 +185,7 @@ class VirtualMachinesSync {
                         server.maxCores = maxCores
                         doSave = true
                     }
-                    if (server.capacityInfo.maxMemory != maxMemory) {
+                    if (server?.capacityInfo?.maxMemory != maxMemory) {
                         server.capacityInfo.maxMemory = maxMemory
                         doSave = true
                     }
