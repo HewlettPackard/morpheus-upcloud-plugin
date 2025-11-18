@@ -349,7 +349,8 @@ class UpcloudCloudProvider implements CloudProvider {
 	 */
 	@Override
 	ServiceResponse refresh(Cloud cloudInfo) {
-		ServiceResponse rtn = new ServiceResponse(success: false)
+		ServiceResponse rtn = ServiceResponse.prepare()
+		rtn.data = [:]
 		HttpApiClient client
 		try {
 			NetworkProxy proxySettings = cloudInfo.apiProxy
@@ -361,6 +362,7 @@ class UpcloudCloudProvider implements CloudProvider {
 			def apiHost = apiUrlObj.getHost()
 			def apiPort = apiUrlObj.getPort() > 0 ? apiUrlObj.getPort() : (apiUrlObj?.getProtocol()?.toLowerCase() == 'https' ? 443 : 80)
 			def hostOnline = ConnectionUtils.testHostConnectivity(apiHost, apiPort, false, true, proxySettings)
+			log.debug("upcloud host online: ${apiHost}, ${hostOnline}")
 			if(hostOnline) {
 				def testResults = UpcloudStatusUtility.testConnection(client, authConfig)
 				if(testResults.success == true) {
@@ -372,16 +374,29 @@ class UpcloudCloudProvider implements CloudProvider {
 
 					rtn = ServiceResponse.success()
 				} else {
-					rtn = ServiceResponse.error(testResults.invalidLogin == true ? 'invalid credentials' : 'error connecting', null, [status: Cloud.Status.offline])
+					//rtn = ServiceResponse.error(testResults.invalidLogin == true ? 'invalid credentials' : 'error connecting', null, [status: Cloud.Status.offline])
+					if (testResults.invalidLogin) {
+						context.services.operationNotification.createZoneAlarm(cloudInfo, 'upcloud invalid credentials')
+						rtn.msg = 'upcloud invalid credentials'
+						rtn.data.status = Cloud.Status.offline
+					} else {
+						context.services.operationNotification.createZoneAlarm(cloudInfo, 'upcloud not reachable')
+						rtn.msg = 'upcloud host not reachable'
+						rtn.data.status = Cloud.Status.offline
+					}
 				}
 			} else {
-				rtn = ServiceResponse.error('upcloud not reachable', null, [status: Cloud.Status.offline])
+				//rtn = ServiceResponse.error('upcloud not reachable', null, [status: Cloud.Status.offline])
+				context.services.operationNotification.createZoneAlarm(cloudInfo, 'upcloud not reachable')
+				rtn.msg = 'upcloud host not reachable'
+				rtn.data.status = Cloud.Status.offline
 			}
 //			ProvisionType upCloudProvType = ProvisionType.findByCode('upcloud')
 //			updateLayoutsForScale(upCloudProvType)
-			rtn = ServiceResponse.success()
+//			rtn = ServiceResponse.success()
 		} catch (e) {
 			log.error("refresh cloud error: ${e}", e)
+			return ServiceResponse.error()
 		} finally {
 			if(client) {
 				client.shutdownClient()

@@ -15,11 +15,14 @@ import com.morpheusdata.upcloud.services.UpcloudApiService
 @Commons
 class UpcloudStatusUtility {
     static testConnection(HttpApiClient client, Map authConfig) {
-        log.debug("testing connection: ${client.dump()}")
         def rtn = [success:false, invalidLogin:false]
         try {
-            def results = UpcloudApiService.listZones(client, authConfig)
-            rtn.success = results.success
+            // list zones to test connection
+            def results = UpcloudApiService.callApi(client, authConfig, '/zone', [:], 'GET')
+            rtn.success = results?.success && !results?.error
+            if (!rtn.success) {
+                rtn.invalidLogin = results.errorCode == "401"
+            }
         } catch(e) {
             log.error("testConnection to upcloud: ${e}")
         }
