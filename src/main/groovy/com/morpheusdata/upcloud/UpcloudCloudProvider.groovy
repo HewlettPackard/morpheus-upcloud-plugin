@@ -645,6 +645,6 @@ class UpcloudCloudProvider implements CloudProvider {
 	}
 	
 	static Boolean hasSecurityGroups() {
-		return false
+		return true
 	}
 }
