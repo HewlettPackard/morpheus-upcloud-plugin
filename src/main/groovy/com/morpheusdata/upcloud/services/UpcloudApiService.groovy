@@ -406,6 +406,7 @@ class UpcloudApiService {
             def pending = true
             def attempts = 0
             while(pending) {
+                log.debug("waiting for server status to become ${status}, attempt: ${attempts}")
                 def serverDetail = getServerDetail(client, authConfig, serverId)
                 log.debug("serverDetail: ${serverDetail}")
                 if(serverDetail.success == true && serverDetail?.server?.state == status) {
@@ -416,18 +417,21 @@ class UpcloudApiService {
                 } else if(serverDetail.success == false && serverDetail.errorCode == '404') {
 					rtn.success = false
 					rtn.errorCode = serverDetail.errorCode
-					pending false
+					pending = false
 					break
 				}
                 attempts ++
                 if(attempts > 100) {
                     pending = false
+                    rtn.success = false
+                    rtn.error = "No backup execution response"
+                    rtn.msg = "No backup execution response"
                 } else {
                     sleep(1000l * 5l)
                 }
             }
         } catch(e) {
-            log.error(e)
+            log.error("waitForServerStatus error: ${e}", e)
         }
         return rtn
     }

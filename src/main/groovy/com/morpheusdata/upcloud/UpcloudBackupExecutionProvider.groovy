@@ -193,54 +193,62 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 			def serverStatus = UpcloudApiService.waitForServerStatus(client, authConfig, computeServer.externalId, 'started')
 
 			//create the backup for each disk
-			def snapshotResults = []
-			def snapshotSuccess = true
-			computeServer.volumes?.each { StorageVolume volume ->
-				if(volume.externalId) {
-					def snapshotConfig = [snapshotName:snapshotName]
-					def snapShotStartResult = UpcloudApiService.waitForStorageStatus(client, authConfig, volume.externalId, 'online', [maxAttempts:360, retryInterval:(1000l * 10l)])
-					def snapshotResult = UpcloudApiService.createSnapshot(client, authConfig, volume.externalId, snapshotConfig)
-					if(snapShotStartResult.success == false && !snapshotResult.msg) {
-						snapshotResult.msg = "Storage state invalid."
+			if(serverStatus.success) {
+				def snapshotResults = []
+				def snapshotSuccess = true
+				computeServer.volumes?.each { StorageVolume volume ->
+					if(volume.externalId) {
+						def snapshotConfig = [snapshotName: snapshotName]
+						def snapShotStartResult = UpcloudApiService.waitForStorageStatus(client, authConfig, volume.externalId, 'online', [maxAttempts: 360, retryInterval: (1000l * 10l)])
+						def snapshotResult = UpcloudApiService.createSnapshot(client, authConfig, volume.externalId, snapshotConfig)
+						if (snapShotStartResult.success == false && !snapshotResult.msg) {
+							snapshotResult.msg = "Storage state invalid."
+						}
+						snapshotSuccess = snapShotStartResult.success && snapshotResult.success && snapshotSuccess
+						snapshotResults << [volume: volume, snapshotResult: snapshotResult]
 					}
-					snapshotSuccess = snapShotStartResult.success && snapshotResult.success && snapshotSuccess
-					snapshotResults << [volume: volume, snapshotResult: snapshotResult]
 				}
-			}
-			log.debug("backup complete: {}", snapshotResults)
-			if(snapshotSuccess == true) {
-				def totalSize = 0
-
-				def snapshots = []
-				snapshotResults?.each {
-					def storageResults = it.snapshotResult.data?.storage
-					StorageVolume volume = it.volume
-					if(storageResults?.uuid)
-						snapshots << [root: volume.rootVolume, sizeInGb: storageResults.size, originId:storageResults.origin, storageId:storageResults.uuid]
-					totalSize += (storageResults?.size?.toLong() ?: 0)
+				log.debug("backup complete: {}", snapshotResults)
+				if(snapshotSuccess == true) {
+					def totalSize = 0
+	
+					def snapshots = []
+					snapshotResults?.each {
+						def storageResults = it.snapshotResult.data?.storage
+						StorageVolume volume = it.volume
+						if (storageResults?.uuid)
+							snapshots << [root: volume.rootVolume, sizeInGb: storageResults.size, originId: storageResults.origin, storageId: storageResults.uuid]
+						totalSize += (storageResults?.size?.toLong() ?: 0)
+					}
+	
+					rtn.success = true
+					rtn.data.backupResult.status = BackupResult.Status.IN_PROGRESS
+					//rtn.data.backupResult.backupResultId = rtn.backupResultId
+					rtn.data.backupResult.sizeInMb = totalSize * 1024l
+					//rtn.data.backupResult.providerType = 'upcloud'
+					rtn.data.backupResult.setConfigProperty("snapshots", snapshots)
+					rtn.data.updates = true
+				} else {
+					//error
+					def errorSnapshots = snapshotResults.findAll { it.snapshotResult.success != true && it.snapshotResult.msg }
+					def errorMessage = errorSnapshots?.collect { it.snapshotResult.msg }?.join('\n') ?: 'unknown error creating snapshots'
+					rtn.data.backupResult.sizeInMb = 0
+					rtn.data.backupResult.errorOutput = errorMessage
+					rtn.data.backupResult.status = BackupResult.Status.FAILED
+					rtn.data.updates = true
 				}
-
-				rtn.success = true
-				rtn.data.backupResult.status = BackupResult.Status.IN_PROGRESS
-				//rtn.data.backupResult.backupResultId = rtn.backupResultId
-				rtn.data.backupResult.sizeInMb = totalSize * 1024l
-				//rtn.data.backupResult.providerType = 'upcloud'
-				rtn.data.backupResult.setConfigProperty("snapshots", snapshots)
-				rtn.data.updates = true
+				if (snapshotSuccess == true && opts.inline) {
+					snapshotResults.each { snapshotResult ->
+						def snapshotStatus = UpcloudApiService.waitForStorageStatus(client, authConfig, snapshotResult.data?.storage?.uuid, 'online')
+					}
+					refreshBackupResult(rtn.data.backupResult)
+				}
 			} else {
-				//error
-				def errorSnapshots = snapshotResults.findAll{ it.snapshotResult.success != true && it.snapshotResult.msg }
-				def errorMessage = errorSnapshots?.collect{ it.snapshotResult.msg }?.join('\n') ?: 'unknown error creating snapshots'
+				rtn.msg = serverStatus.msg
+				rtn.data.backupResult.errorOutput = "Failed to execute backup".encodeAsBase64()
 				rtn.data.backupResult.sizeInMb = 0
-				rtn.data.backupResult.errorOutput = errorMessage
 				rtn.data.backupResult.status = BackupResult.Status.FAILED
 				rtn.data.updates = true
-			}
-			if(snapshotSuccess == true && opts.inline) {
-				snapshotResults.each { snapshotResult ->
-					def snapshotStatus = UpcloudApiService.waitForStorageStatus(client, authConfig, snapshotResult.data?.storage?.uuid, 'online')
-				}
-				refreshBackupResult(rtn.data.backupResult)
 			}
 		} catch(e) {
 			log.error("executeBackup: ${e}", e)
@@ -304,6 +312,12 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 
 					rtn.success = true
 				}
+			} else {
+				rtn.msg = "No snapshots found"
+				rtn.data.backupResult.errorOutput = "No snapshots found".encodeAsBase64()
+				rtn.data.backupResult.sizeInMb = 0
+				rtn.data.backupResult.status = BackupResult.Status.FAILED
+				rtn.data.updates = true
 			}
 		} catch (Exception e) {
 			log.error("refreshBackupResult error: {}", e, e)
