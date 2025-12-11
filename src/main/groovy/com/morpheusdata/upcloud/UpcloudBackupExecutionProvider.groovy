@@ -188,6 +188,10 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 				morpheus.executeCommandOnServer(computeServer, 'sync')
 			}
 
+			// disable cloud init and clear cache to force cloud init on restore
+			if(computeServer.sourceImage && computeServer.sourceImage.isCloudInit && computeServer.serverOs?.platform != 'windows') {
+				plugin.morpheus.executeCommandOnServer(computeServer, 'sudo rm -f /etc/cloud/cloud.cfg.d/99-manual-cache.cfg; sudo cp /etc/machine-id /tmp/machine-id-old ; sync', true, computeServer.sshUsername, computeServer.sshPassword, null, null, null, null, true, true).blockingGet()
+			}
 			//auth config
 			def authConfig = plugin.getAuthConfig(cloud)
 			def serverStatus = UpcloudApiService.waitForServerStatus(client, authConfig, computeServer.externalId, 'started')
@@ -311,6 +315,15 @@ class UpcloudBackupExecutionProvider implements BackupExecutionProvider {
 						rtn.data.backupResult.durationMillis = endDate.time - startDate.time
 
 					rtn.success = true
+
+					// backup completed, re-enable cloud-init
+					if([BackupStatusUtility.FAILED, BackupStatusUtility.CANCELLED, BackupStatusUtility.SUCCEEDED].contains(rtn.data.backupResult.status)) {
+						Long computeServerId = backupResult.serverId
+						ComputeServer computeServer = getPlugin().morpheus.computeServer.get(computeServerId).blockingGet()
+						if(computeServer && computeServer.sourceImage && computeServer.sourceImage.isCloudInit && computeServer.serverOs?.platform != 'windows') {
+							getPlugin().morpheus.executeCommandOnServer(computeServer, "sudo bash -c \"echo 'manual_cache_clean: True' >> /etc/cloud/cloud.cfg.d/99-manual-cache.cfg\"; sudo cat /tmp/machine-id-old > /etc/machine-id ; sudo rm /tmp/machine-id-old ; sync", true, computeServer.sshUsername, computeServer.sshPassword, null, null, null, null, true, true).blockingGet()
+						}
+					}
 				}
 			} else {
 				rtn.msg = "No snapshots found"

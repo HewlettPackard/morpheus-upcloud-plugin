@@ -46,7 +46,7 @@ import com.morpheusdata.upcloud.services.UpcloudApiService
 import groovy.util.logging.Slf4j
 
 @Slf4j
-class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmProvisionProvider, WorkloadProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, HostProvisionProvider.ResizeFacet {
+class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmProvisionProvider, WorkloadProvisionProvider, ProvisionProvider.BlockDeviceNameFacet, WorkloadProvisionProvider.ResizeFacet, HostProvisionProvider.ResizeFacet, ProvisionProvider.HypervisorConsoleFacet {
 	public static final String PROVISION_PROVIDER_CODE = 'upcloud.provision'
 
 	protected MorpheusContext context
@@ -399,7 +399,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 						platform: (virtualImage.osType?.platform?.toString() == 'windows' ? 'windows' : 'linux') ?: virtualImage.platform,
 						proxySettings: workloadRequest.proxyConfiguration,
 						userConfig: workloadRequest.usersConfiguration,
-						cloudConfig: workloadRequest.cloudConfigUser,
 						networkConfig: workloadRequest.networkConfiguration,
 						noAgent: (opts.config?.containsKey("noAgent") == true && opts.config.noAgent == true),
 						installAgent: (opts.config?.containsKey("noAgent") == false || (opts.config?.containsKey("noAgent") && opts.config.noAgent != true))
@@ -407,6 +406,14 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 				log.debug("run config server interfaces: ${runConfig.serverInterfaces}")
 				log.debug("run config: ${runConfig}")
 
+				if(virtualImage?.isCloudInit) {
+					def cloudConfigOpts = workloadRequest?.cloudConfigOpts ?: null
+					opts.installAgent = (cloudConfigOpts.installAgent != true)
+					
+					def cloudConfigUser = workloadRequest?.cloudConfigUser ?: null
+					runConfig.userData = cloudConfigUser
+				}
+				
 				if(servicePlan.internalId == 'custom') {
 					runConfig.maxMemory = workload.maxMemory ?: servicePlan.maxMemory
 					runConfig.maxCores = workload.maxCores ?: servicePlan.maxCores
