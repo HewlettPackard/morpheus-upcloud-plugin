@@ -647,4 +647,8 @@ class UpcloudCloudProvider implements CloudProvider {
 	static Boolean hasSecurityGroups() {
 		return true
 	}
+	
+	String getCloudInstanceTypeLayoutCode() {
+		return 'upcloud-1.0-single'
+	}
 }
