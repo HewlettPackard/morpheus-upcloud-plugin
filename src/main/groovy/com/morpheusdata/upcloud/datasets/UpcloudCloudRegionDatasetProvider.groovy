@@ -104,8 +104,8 @@ class UpcloudCloudRegionDatasetProvider extends AbstractDatasetProvider<CloudReg
         return (Long)item.id
     }
 
-    @Override
-    boolean isPlugin() {
-        return true
-    }
+//    @Override
+//    boolean isPlugin() {
+//        return true
+//    }
 }

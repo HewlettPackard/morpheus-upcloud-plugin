@@ -84,10 +84,10 @@ class UpcloudImageDatasetProvider extends AbstractDatasetProvider<VirtualImage, 
         return item.id
     }
 
-    @Override
-    boolean isPlugin() {
-        return true
-    }
+//    @Override
+//    boolean isPlugin() {
+//        return true
+//    }
 
     DataQuery buildQuery(DatasetQuery datasetQuery) {
         Long cloudId = datasetQuery.get("zoneId")?.toLong()
