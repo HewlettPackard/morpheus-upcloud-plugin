@@ -98,7 +98,6 @@ class UpcloudPlugin extends Plugin {
         rtn.username = username
         rtn.password = password
         rtn.apiUrl = UpcloudApiService.upCloudEndpoint
-        log.debug("getAuthConfig: ${rtn.username}, ${rtn.password}")
         return rtn
     }
 
