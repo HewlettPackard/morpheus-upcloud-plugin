@@ -108,6 +108,35 @@ resource "os-type-image" "upcloud-image-morpheus-ubuntu-20_04" {
       owner = null
    }
  }
+ 
+ resource "virtual-image" "upcloud-image-morpheus-ubuntu-22_04" {
+     code                = "upcloud.image.morpheus.ubuntu.22.04"
+     category            = "upcloud.image.morpheus"
+     sshUsername         = "root"
+     sshPassword         = null
+     name                = "morpheus ubuntu 22.04"
+     imageType           = "qcow2"
+     systemImage         = true
+     installAgent        = true
+     computeServerImage  = true
+     isCloudInit         = false
+     externalId          = "01000000-0000-4000-8000-000030220200"
+     osType              = {
+         code = "ubuntu.22.04.64"
+         owner = null
+     }
+ }
+ 
+ resource "os-type-image" "upcloud-image-morpheus-ubuntu-22_04" {
+    code               = "upcloud.image.morpheus.ubuntu.22.04"
+    provisionType      = "upcloud"
+    virtualImage       = virtual-image.upcloud-image-morpheus-ubuntu-22_04
+    account            = null
+    osType = {
+       code = "ubuntu.22.04.64"
+       owner = null
+    }
+  }
 
 resource "virtual-image" "upcloud-image-morpheus-centos-7_3" {
     code                = "upcloud.image.morpheus.centos.7.3"

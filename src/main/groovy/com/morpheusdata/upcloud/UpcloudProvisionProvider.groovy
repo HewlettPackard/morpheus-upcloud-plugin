@@ -1187,18 +1187,22 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 				if (virtualImageId) {
 					virtualImage = context.services.virtualImage.get(virtualImageId)
 				}
-			} else {
-				// TODO: this is the fallback... should we really do this?
-				virtualImage = context.services.virtualImage.find(new DataQuery().withFilter('code', 'upcloud.image.morpheus.ubuntu.20.04'))
-			}
+			} 
+//			else {
+//				// TODO: this is the fallback... should we really do this?
+//				virtualImage = context.services.virtualImage.find(new DataQuery().withFilter('code', 'upcloud.image.morpheus.ubuntu.20.04'))
+//			}
 
 			if (!virtualImage) {
-				rtn.msg = "No virtual image selected"
-			} else {
-				server.sourceImage = virtualImage
-				saveAndGet(server)
-				rtn.success = true
+				// TODO: this is the fallback... should we really do this?
+				virtualImage = context.services.virtualImage.find(new DataQuery().withFilter('code', 'upcloud.image.morpheus.ubuntu.22.04'))
 			}
+			
+			log.debug("prepareHost - virtual image selected: ${virtualImage}")
+			server.sourceImage = virtualImage
+			saveAndGet(server)
+			rtn.success = true
+			
 		} catch (e) {
 			rtn.msg = "Error in prepareHost: ${e}"
 			log.error("${rtn.msg}, ${e}", e)
@@ -1229,7 +1233,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 			def layout = server?.layout
 			def typeSet = server?.typeSet
 
-			if(layout && typeSet && (typeSet.workloadType.virtualImage || typeSet.workloadType.osType)) {
+			if(layout && typeSet && (typeSet.workloadType.virtualImage)) {
 				Long computeTypeSetId = server.typeSet?.id
 				if(computeTypeSetId) {
 					ComputeTypeSet computeTypeSet = morpheus.services.computeTypeSet.get(computeTypeSetId)
@@ -1259,7 +1263,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 				virtualImage = server.sourceImage
 				imageId = virtualImage.externalId
 			} else if (!virtualImage) {
-				virtualImage = context.services.virtualImage.find(new DataQuery().withFilter('code', 'upcloud.image.morpheus.ubuntu.20.04'))
+				virtualImage = context.services.virtualImage.find(new DataQuery().withFilter('code', 'upcloud.image.morpheus.ubuntu.22.04'))
 				imageId = virtualImage.externalId
 			}
 
