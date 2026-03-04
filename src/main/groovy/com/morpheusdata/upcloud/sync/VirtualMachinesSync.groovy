@@ -313,7 +313,6 @@ class VirtualMachinesSync {
                 log.warn("ignoring server ${server} because it is resizing")
                 return saveRequired
             }
-            def storageType = new StorageVolumeType(code:'upcloudVolume')
             SyncList.MatchFunction matchFunction = { StorageVolume morpheusVolume, Map volume ->
                 morpheusVolume?.externalId == volume.storageId
             }
@@ -326,6 +325,8 @@ class VirtualMachinesSync {
             //adds
             syncLists.addList?.each { Map volume ->
                 log.debug("adding volume: ${volume}")
+                def storageTypeCode = volume.tier == "maxiops" ? 'upcloudVolume' : 'upcloudStandardVolume'
+                def storageType = new StorageVolumeType(code:storageTypeCode)
                 def volumeId = volume.storageId
                 def addVolume = new StorageVolume([maxStorage:volume.size * ComputeUtility.ONE_GIGABYTE, type:storageType,
                                                    externalId:volumeId, deviceName:volume.deviceName, name:volume.name, cloudId:server.cloud?.id])

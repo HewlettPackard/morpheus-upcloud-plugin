@@ -162,10 +162,14 @@ class UpcloudCloudProvider implements CloudProvider {
 	Collection<StorageVolumeType> getStorageVolumeTypes() {
 		Collection<StorageVolumeType> volumeTypes = []
 		volumeTypes << new StorageVolumeType([code:'upcloudVolume', displayName:'UpCloud MaxIOPS', name:'MaxIOPS', description:'UpCloud MaxIOPS', volumeType:'disk', enabled:true,
-											  displayOrder:1, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk']) // MaxIPOs
+											  displayOrder:1, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk']) // MaxIOPs
 
 		volumeTypes << new StorageVolumeType([code:'upcloudHddVolume', displayName:'UpCloud Disk', name:'HDD', description:'UpCloud HDD', volumeType:'disk', enabled:false,
 											  displayOrder:2, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk']) // HDD
+
+		volumeTypes << new StorageVolumeType([code:'upcloudStandardVolume', displayName:'UpCloud Standard', name:'Standard', description:'UpCloud Standard', volumeType:'disk', enabled:true,
+											  displayOrder:3, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk']) // Standard
+		
 		return volumeTypes
 	}
 

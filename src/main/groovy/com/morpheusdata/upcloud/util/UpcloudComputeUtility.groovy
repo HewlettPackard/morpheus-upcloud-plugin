@@ -53,9 +53,10 @@ class UpcloudComputeUtility {
         try {
             storageDevices?.eachWithIndex { storageDevice, index ->
                 if(storageDevice.type == 'disk') {
-                    def newDisk = [address:storageDevice.address, size:storageDevice.'storage_size',
-                                   description:storageDevice.'storage_title', name:storageDevice.'storage_title',
-                                   type:'disk', storageId:storageDevice.storage, index:index, deviceName:storageDevice.address]
+                    def newDisk = [address:storageDevice.address, size:storageDevice.storage_size,
+                                   description:storageDevice.storage_title, name:storageDevice.storage_title,
+                                   type:'disk', storageId:storageDevice.storage, index:index, deviceName:storageDevice.address,
+                                   tier:storageDevice.storage_tier]
                     rtn << newDisk
                 }
             }
