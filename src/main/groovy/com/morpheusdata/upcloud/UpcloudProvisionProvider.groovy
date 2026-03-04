@@ -1453,7 +1453,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 	StorageVolume buildStorageVolume(Account account, locationOrServer, volume, index, size = null) {
 		log.debug "buildStorageVolume: ${account} ${locationOrServer} ${volume} ${index}"
 		StorageVolume storageVolume = new StorageVolume()
-		storageVolume.name = volume.name
+		storageVolume.name = volume.title
 		storageVolume.account = account
 		storageVolume.maxStorage = size?.toLong() ?: volume.maxStorage?.toLong() ?: volume.size?.toLong() ?: 0l
 		if(volume.storageType) {
