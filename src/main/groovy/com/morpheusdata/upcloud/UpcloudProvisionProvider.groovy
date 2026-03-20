@@ -1586,7 +1586,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 					if (updateProps.maxStorage > existing.maxStorage) {
 						def volumeId = existing.externalId
 						def storageVolumeId = existing.id
-						def resizeResults = UpcloudApiService.resizeStorage(client, authConfigMap, volumeId, [maxStorage: volumeUpdate.volume.maxStorage])
+						def resizeResults = UpcloudApiService.resizeStorage(client, authConfigMap, volumeId, [maxStorage: updateProps.maxStorage])
 						log.debug("resizeResults ${resizeResults}")
 
 						if (resizeResults.success == true) {
