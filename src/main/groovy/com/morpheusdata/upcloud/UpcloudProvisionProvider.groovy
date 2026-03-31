@@ -673,8 +673,6 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 				} else {
 					return ServiceResponse.error('Failed to stop vm')
 				}
-			} else {
-				return ServiceResponse.error('Failed to stop vm')
 			}
 		} else {
 			log.debug("stopServer - ignoring request for unmanaged instance")

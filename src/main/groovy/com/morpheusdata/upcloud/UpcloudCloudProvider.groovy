@@ -579,8 +579,6 @@ class UpcloudCloudProvider implements CloudProvider {
 				}
 			} else if(stopResults.errorCode == '404') {
 				return ServiceResponse.success()
-			} else {
-				return ServiceResponse.error('Failed to stop server')
 			}
 		} else {
 			log.debug("deleteServer - ignoring request for unmanaged instance")
