@@ -653,4 +653,8 @@ class UpcloudCloudProvider implements CloudProvider {
 	static Boolean hasCosting() {
 		return true
 	}
+	
+	static Boolean hasNativePlans() {
+		return true
+	}
 }
