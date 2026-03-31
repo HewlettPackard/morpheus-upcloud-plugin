@@ -654,6 +654,10 @@ class UpcloudCloudProvider implements CloudProvider {
 		return true
 	}
 	
+	static Boolean hasNativePlans() {
+		return true
+	}
+	
 	String getCloudInstanceTypeLayoutCode() {
 		return 'upcloud-1.0-single'
 	}
