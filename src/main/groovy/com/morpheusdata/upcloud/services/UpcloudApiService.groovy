@@ -797,7 +797,7 @@ class UpcloudApiService {
                     storage: [
                             size:maxStorage,
                             tier:storageConfig.tier ?: 'maxiops',
-                            title:storageConfig.serverName + ' ' + (storageConfig.name ?: 'disk ' + (storageConfig.index ?: 1)),
+                            title:storageConfig.name ?: 'disk ' + (storageConfig.index ?: 1),
                             zone:storageConfig.zoneRef
                     ]
             ]
