@@ -201,7 +201,7 @@ class UpcloudCloudProvider implements CloudProvider {
 			),
 			new ComputeServerType(
 				code:'upcloudVm', name:'UpCloud VM Instance', description:'', platform:'linux', nodeType:'morpheus-vm-node',
-				enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:false, creatable:true, computeService:'upCloudComputeService',
+				enabled:true, selectable:false, externalDelete:true, managed:true, controlPower:true, controlSuspend:false, creatable:false, computeService:'upCloudComputeService',
 				displayOrder: 0, hasAutomation:true,reconfigureSupported: true,
 				containerHypervisor:false, bareMetalHost:false, vmHypervisor:false, agentType:ComputeServerType.AgentType.guest, guestVm:true,
 				provisionTypeCode:'upcloud'
