@@ -50,7 +50,7 @@ class VirtualMachinesSync {
             log.debug("apiResults: ${apiResults}")
 
             if (apiResults.success == true) {
-                def servicePlans = morpheusContext.async.servicePlan.listIdentityProjections(
+                def servicePlans = morpheusContext.async.servicePlan.list(
                         new DataQuery().withFilter("provisionType", "upcloud")
                         .withFilter("active", true)
                 )
@@ -82,7 +82,7 @@ class VirtualMachinesSync {
         }
     }
 
-    private addMissingVirtualMachines(Collection<Map> addList, Observable<ServicePlanIdentityProjection> servicePlans) {
+    private addMissingVirtualMachines(Collection<Map> addList, Observable<ServicePlan> servicePlans) {
         def authConfig = plugin.getAuthConfig(cloud)
         def serverType = new ComputeServerType(code: 'upcloudUnmanaged')
         def adds = []
@@ -152,7 +152,7 @@ class VirtualMachinesSync {
         def savesCloudServers = [:]
         def authConfig = plugin.getAuthConfig(cloud)
         def serverType = new ComputeServerType(code:'upcloudUnmanaged')
-        def servicePlans = morpheusContext.async.servicePlan.listIdentityProjections(
+        def servicePlans = morpheusContext.async.servicePlan.list(
                 new DataQuery().withFilter("provisionType", "upcloud")
                         .withFilter("active", true)
         )
