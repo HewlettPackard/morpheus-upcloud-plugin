@@ -169,7 +169,7 @@ class UpcloudCloudProvider implements CloudProvider {
 
 		volumeTypes << new StorageVolumeType([code:'upcloudStandardVolume', displayName:'UpCloud Standard', name:'Standard', description:'UpCloud Standard', volumeType:'disk', enabled:true,
 											  displayOrder:3, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk']) // Standard
-		
+
 		return volumeTypes
 	}
 
@@ -653,11 +653,11 @@ class UpcloudCloudProvider implements CloudProvider {
 	static Boolean hasCosting() {
 		return true
 	}
-	
+
 	static Boolean hasNativePlans() {
 		return true
 	}
-	
+
 	String getCloudInstanceTypeLayoutCode() {
 		return 'upcloud-1.0-single'
 	}
