@@ -317,7 +317,7 @@ class UpcloudApiService {
                     def diskSize = (int)dataDisk.maxStorage.div(ComputeUtility.ONE_GIGABYTE)
                     def diskData = [action: 'create',
                                     size:diskSize,
-                                    tier:(dataDisk.diskType == 'upcloudHddVolume') ? 'hdd' : 'maxiops',
+                                    tier:(dataDisk.type.code == 'upcloudStandardVolume') ? 'standard' : 'maxiops',
                                     title:serverConfig.name + ' ' + (dataDisk.name ?: 'disk ' + (index + 1))
                     ]
 
@@ -797,7 +797,7 @@ class UpcloudApiService {
                     storage: [
                             size:maxStorage,
                             tier:storageConfig.tier ?: 'maxiops',
-                            title:storageConfig.name ?: 'disk ' + (storageConfig.index ?: 1),
+                            title:storageConfig.serverName + ' ' + (storageConfig.name ?: 'disk ' + (storageConfig.index ?: 1)),
                             zone:storageConfig.zoneRef
                     ]
             ]

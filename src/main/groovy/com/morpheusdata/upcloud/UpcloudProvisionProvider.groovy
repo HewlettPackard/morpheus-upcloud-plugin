@@ -209,9 +209,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 	Collection<StorageVolumeType> getRootVolumeStorageTypes() {
 		Collection<StorageVolumeType> volumeTypes = [
 			new StorageVolumeType(code:'upcloudVolume', displayName:'UpCloud MaxIOPS', name:'MaxIOPS', description:'UpCloud MaxIOPS', volumeType:'disk', enabled:true,
-				displayOrder:1, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk'), // MaxIOPS
-			new StorageVolumeType([code:'upcloudStandardVolume', displayName:'UpCloud Standard', name:'Standard', description:'UpCloud Standard', volumeType:'disk', enabled:true,
-				displayOrder:3, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk']) // Standard
+				displayOrder:1, customLabel:true, customSize:true, defaultType:true, autoDelete:true, minStorage:(10L * ComputeUtility.ONE_GIGABYTE), allowSearch:true, volumeCategory:'disk') // MaxIOPS
 		]
 		// TODO: create some storage volume types and add to collection
 		return volumeTypes
@@ -1448,10 +1446,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 //		return newVolume
 //	}
 
-	StorageVolume buildStorageVolume(Account account, locationOrServer, volume, index, size = null) {
+	StorageVolume buildStorageVolume(Account account, locationOrServer, volume, volumeName, index, size = null) {
 		log.debug "buildStorageVolume: ${account} ${locationOrServer} ${volume} ${index}"
 		StorageVolume storageVolume = new StorageVolume()
-		storageVolume.name = volume.title
+		storageVolume.name = volumeName
 		storageVolume.account = account
 		storageVolume.maxStorage = size?.toLong() ?: volume.maxStorage?.toLong() ?: volume.size?.toLong() ?: 0l
 		if(volume.storageType) {
@@ -1542,7 +1540,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 				}
 
 				def zoneRef = server.cloud.getConfigMap().zone
-				def addDiskConfig = [name: newVolumeProps.name, zoneRef: zoneRef, serverName: server.name, maxStorage: newVolumeProps.maxStorage]
+				def storageTypeCode = morpheus.storageVolume.storageVolumeType.get(newVolumeProps.storageType.toLong()).blockingGet()?.code ?: 'upcloudVolume'
+				log.info("storageTypeCode: ${storageTypeCode}")
+				def upcloudStorageTypeCode = storageTypeCode == 'upcloudStandardVolume' ? 'standard' : 'maxiops'
+				def addDiskConfig = [name: newVolumeProps.name, zoneRef: zoneRef, serverName: server.name, maxStorage: newVolumeProps.maxStorage, tier:upcloudStorageTypeCode]
 				def addDiskResults = UpcloudApiService.createStorage(client, authConfigMap, addDiskConfig)
 				log.debug("addDiskResults ${addDiskResults}")
 
@@ -1562,7 +1563,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 
 				def containerServer = morpheus.services.computeServer.get(server.id)
 				def volumeType = allStorageVolumeTypes[newVolumeProps.storageType.toLong()] // 'upcloudVolume'
-				def newVolume = buildStorageVolume(containerServer.account, containerServer, addDiskResults.data.storage, newCounter)
+				def newVolume = buildStorageVolume(containerServer.account, containerServer, addDiskResults.data.storage, addDiskConfig.name, newCounter)
 				def deviceName =  getDiskName(newCounter)
 				def deviceAddress = attachResults.address ?: deviceName
 				newVolume.type = volumeType
@@ -1624,7 +1625,7 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 
 					def containerServer = morpheus.services.computeServer.get(server.id)
 					def volumeType = allStorageVolumeTypes[updateProps.storageType.toLong()] // 'upcloudVolume'
-					def newVolume = buildStorageVolume(containerServer.account, containerServer, addDiskResults.data.storage, newCounter)
+					def newVolume = buildStorageVolume(containerServer.account, containerServer, addDiskResults.data.storage, addDiskConfig.name, newCounter)
 					def deviceName = getDiskName(newCounter)
 					def deviceAddress = attachResults.address ?: deviceName
 					newVolume.type = volumeType
