@@ -90,6 +90,11 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 		return 'upcloud'
 	}
 
+	@Override
+	String getDeployTargetService() {
+		return "vmDeployTargetService"
+	}
+
 	/**
 	 * Provide an icon to be displayed for ServicePlans, VM detail page, etc.
 	 * where a circular icon is displayed
