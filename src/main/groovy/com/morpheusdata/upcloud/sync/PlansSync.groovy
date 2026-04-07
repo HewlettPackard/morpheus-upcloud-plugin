@@ -469,6 +469,7 @@ class PlansSync {
                 type: AccountPriceSet.PRICE_SET_TYPE.component.toString(),
                 systemCreated: true
         )
+          priceSet = morpheusContext.async.accountPriceSet.create(priceSet).blockingGet()
 
         // Get or create the prices
         // First.. memory
