@@ -81,7 +81,9 @@ class PublicTemplatesSync {
                         externalId: cloudItem.uuid,
                         isPublic: cloudItem.visibility,
                         platform: cloudItem.title.startsWith("Windows ") ? 'windows' : 'linux',
-                        minDisk: cloudItem.size
+                        minDisk: cloudItem.size,
+                        refId: cloud.id.toString(),
+                        refType: 'ComputeZone'
                     ]
 
                 imageConfig.osType = new OsType(code:(cloudItem.title.startsWith("Windows ") ? 'windows' : 'linux'))
