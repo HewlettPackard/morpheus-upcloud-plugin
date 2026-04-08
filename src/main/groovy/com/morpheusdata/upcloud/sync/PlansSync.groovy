@@ -113,13 +113,12 @@ class PlansSync {
         }
     }
 
-    private updateMatchedPlans(List<SyncTask.UpdateItem<ServicePlanIdentityProjection, Map>> updateList) {
+    private updateMatchedPlans(List<SyncTask.UpdateItem<ServicePlan, Map>> updateList) {
         def saves = []
-        def servicePlansById = morpheusContext.async.servicePlan.listById(updateList.collect { it.existingItem.id }).toMap() { it.id }.blockingGet()
         try {
             for(updateMap in updateList) {
                 def matchedItem = updateMap.masterItem
-                def plan = servicePlansById[updateMap.existingItem.id]
+                def plan = updateMap.existingItem
                 def name = (matchedItem.custom == true) ? matchedItem.name : getNameForPlan(matchedItem)
                 def save = false
                 if (plan.name != name) {
@@ -146,7 +145,7 @@ class PlansSync {
                     saves << plan
                 }
             }
-            def updateResponse = morpheusContext.async.servicePlan.bulkSave(saves).blockingGet()
+            def updateResponse = morpheusContext.services.servicePlan.bulkSave(saves)
             def servicePlans = updateResponse.persistedItems
             syncPlanPrices(servicePlans)
         } catch(e) {
@@ -154,13 +153,11 @@ class PlansSync {
         }
     }
 
-    def removeMissingPlans(List removeList) {
-        def saves = []
-        removeList?.each { ServicePlanIdentityProjection it ->
-            ServicePlan servicePlan = morpheusContext.async.servicePlan.get(it.id).blockingGet()
-            servicePlan.active = false
-            servicePlan.deleted = true
-            saves << it
+    def removeMissingPlans(List<ServicePlanIdentityProjection> removeList) {
+        def saves = morpheusContext.services.servicePlan.listById(removeList.collect {it.id})
+        saves?.each { ServicePlan it ->
+            it.active = false
+            it.deleted = true
         }
         morpheusContext.async.servicePlan.bulkSave(saves).blockingGet()
     }
