@@ -37,7 +37,7 @@ class UserImagesSync {
                 log.debug("CLOUD ID: ${cloud.id}")
                 def apiResults = morpheusContext.async.virtualImage.listIdentityProjections(
                         new DataQuery().withFilter("refType", "ComputeZone")
-                        .withFilter("refId", cloud.id.toString())
+                        .withFilter("refId", cloud.id.toString()).withFilter("category", "!=", "upcloud.image.public.template")
                 )
                 //log.debug("API RESULTS: ${apiResults.toList().blockingGet()}")
                 def imageRecords = apiResults ?: []
