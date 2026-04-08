@@ -92,11 +92,14 @@ class PublicTemplatesSync {
 //                }
 
                 def newImage = new VirtualImage(imageConfig)
-                saves << newImage
+
 
                 def layoutMatch = imageTypeMap.find{ imageType -> imageType.match == cloudItem.title}
                 if(layoutMatch?.map == true) {
-                    createTemplateLayout(newImage, layoutMatch, cloudItem)
+                    VirtualImage savedImage = morpheusContext.services.virtualImage.create(newImage)
+                    createTemplateLayout(savedImage, layoutMatch, cloudItem)
+                } else {
+                    saves << newImage
                 }
             }
             morpheusContext.async.virtualImage.bulkCreate(saves).blockingGet()
