@@ -113,12 +113,13 @@ class PlansSync {
         }
     }
 
-    private updateMatchedPlans(List<SyncTask.UpdateItem<ServicePlan, Map>> updateList) {
+    private updateMatchedPlans(List<SyncTask.UpdateItem<ServicePlanIdentityProjection, Map>> updateList) {
         def saves = []
+        def servicePlansById = morpheusContext.async.servicePlan.listById(updateList.collect { it.existingItem.id }).toMap() { it.id }.blockingGet()
         try {
             for(updateMap in updateList) {
                 def matchedItem = updateMap.masterItem
-                def plan = updateMap.existingItem
+                def plan = servicePlansById[updateMap.existingItem.id]
                 def name = (matchedItem.custom == true) ? matchedItem.name : getNameForPlan(matchedItem)
                 def save = false
                 if (plan.name != name) {
