@@ -229,10 +229,37 @@ class PlansSync {
             }
 
             Map customPlanOpts = getCustomServicePlan()
+            log.debug("Custom plan opts: ${customPlanOpts}")
             def customPlan = morpheusContext.async.servicePlan.find(
                     new DataQuery().withFilter("code",'upcloud.plan.Custom UpCloud')
                     .withFilter("active", true)
             ).blockingGet()
+            if(!customPlan){
+                def name = customPlanOpts.name
+                def servicePlan = new ServicePlan(
+                    code:"upcloud.plan.${customPlanOpts.name}",
+                    provisionType:upcloudProvisionType,
+                    description:name,
+                    name:name,
+                    editable:false,
+                    externalId:customPlanOpts.name,
+                    maxCores:customPlanOpts.core_number,
+                    maxMemory:customPlanOpts.memory_amount.toLong() * ComputeUtility.ONE_MEGABYTE,
+                    maxStorage:customPlanOpts.storage_size.toLong() * ComputeUtility.ONE_GIGABYTE,
+                    active: true,
+                    addVolumes:true,
+                    deletable: false,
+                    sortOrder: 131072l,
+                    customCores: true,
+                    customMaxStorage: true,
+                    customMaxMemory: true,
+                    customMaxDataStorage: true,
+                    internalId: 'custom'
+                )
+
+                customPlan = morpheusContext.async.servicePlan.create(servicePlan).blockingGet()
+            }
+
 
             syncCustomPlan(customPlan, cloudPriceData, storagePrice)
 
@@ -380,7 +407,7 @@ class PlansSync {
                     if(priceSet) {
                         morpheusContext.async.accountPriceSet.addToPriceSet(priceSet, price).blockingGet()
                     } else {
-                        log.error("createPrice addToPriceSet: Could not find matching price set for code {}", price.code)
+                        log.error("createPrice (update) addToPriceSet: Could not find matching price set for code {}", price.code)
                     }
                 }
             }
