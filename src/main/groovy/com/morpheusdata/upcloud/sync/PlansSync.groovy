@@ -304,7 +304,6 @@ class PlansSync {
         Boolean itemsCreated = morpheusContext.async.accountPrice.create(createList).blockingGet()
         if(itemsCreated) {
             List<String> priceSetCodes = createList.collect { it.code.replace("upcloud.price.", "upcloud.plan.") }
-            log.info("priceSetCodes: ${priceSetCodes}")
             
             Map<String, AccountPriceSet> tmpPriceSets = morpheusContext.accountPriceSet.listByCode(priceSetCodes).toList().blockingGet().collectEntries { [(it.code): it] }
             morpheusContext.async.accountPrice.listByCode(createList.collect {it.code}).blockingSubscribe { AccountPrice price ->
