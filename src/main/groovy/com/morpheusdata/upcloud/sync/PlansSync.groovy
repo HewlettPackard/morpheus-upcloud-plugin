@@ -167,7 +167,7 @@ class PlansSync {
         List<AccountPriceSet> priceSets = []
         List<AccountPrice> prices = []
         Map<String, ServicePlan> priceSetPlans = [:]
-        Map<String, ServicePlan> priceSetPrices = [:]
+        Map<String, AccountPrice> priceSetPrices = [:]
 
         def authConfig = plugin.getAuthConfig(cloud)
         def priceListResults = UpcloudApiService.listPrices(client, authConfig)
@@ -303,10 +303,13 @@ class PlansSync {
     def createPrice(List<AccountPrice> createList) {
         Boolean itemsCreated = morpheusContext.async.accountPrice.create(createList).blockingGet()
         if(itemsCreated) {
-            List<String> priceSetCodes = createList.collect { it.code }
+            List<String> priceSetCodes = createList.collect { it.code.replace("upcloud.price.", "upcloud.plan.") }
+            log.info("priceSetCodes: ${priceSetCodes}")
+            
             Map<String, AccountPriceSet> tmpPriceSets = morpheusContext.accountPriceSet.listByCode(priceSetCodes).toList().blockingGet().collectEntries { [(it.code): it] }
-            morpheusContext.async.accountPrice.listByCode(priceSetCodes).blockingSubscribe { AccountPrice price ->
-                AccountPriceSet priceSet = tmpPriceSets[price.code]
+            morpheusContext.async.accountPrice.listByCode(createList.collect {it.code}).blockingSubscribe { AccountPrice price ->
+                def priceSetCode = price.code.replace("upcloud.price.", "upcloud.plan.")
+                AccountPriceSet priceSet = tmpPriceSets[priceSetCode]
                 if(priceSet) {
                     morpheusContext.async.accountPriceSet.addToPriceSet(priceSet, price).blockingGet()
                 } else {
@@ -365,10 +368,11 @@ class PlansSync {
         if(itemsToUpdate.size() > 0) {
             Boolean itemsUpdated = morpheusContext.async.accountPrice.save(itemsToUpdate).blockingGet()
             if(itemsUpdated) {
-                List<String> priceSetCodes = itemsToUpdate.collect { it.code }
+                List<String> priceSetCodes = itemsToUpdate.collect { it.code.replace("upcloud.price.", "upcloud.plan.") }
                 Map<String, AccountPriceSet> tmpPriceSets = morpheusContext.async.accountPriceSet.listByCode(priceSetCodes).toList().blockingGet().collectEntries { [(it.code): it] }
-                morpheusContext.async.accountPrice.listByCode(priceSetCodes).blockingSubscribe { AccountPrice price ->
-                    AccountPriceSet priceSet = tmpPriceSets[price.code]
+                morpheusContext.async.accountPrice.listByCode(itemsToUpdate.collect {it.code}).blockingSubscribe { AccountPrice price ->
+                    def priceSetCode = price.code.replace("upcloud.price.", "upcloud.plan.")
+                    AccountPriceSet priceSet = tmpPriceSets[priceSetCode]
                     BigDecimal matchedCost = updateCostMap[price.id]
                     if(matchedCost != null) {
                         price.cost = matchedCost
