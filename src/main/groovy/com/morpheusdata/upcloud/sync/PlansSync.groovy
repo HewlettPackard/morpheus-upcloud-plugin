@@ -46,7 +46,7 @@ class PlansSync {
                 def upcloudProvisionType = new ProvisionType(code:'upcloud')
                 def existingList = morpheusContext.async.servicePlan.listIdentityProjections(
                         new DataQuery().withFilter("provisionType", upcloudProvisionType)
-                        .withFilter('active', true)
+                                .withFilter('active', true)
                 )
                 planList << getCustomServicePlan()
                 SyncTask<ServicePlanIdentityProjection, Map, ServicePlan> syncTask = new SyncTask<>(existingList, planList as Collection<Map>) as SyncTask<ServicePlanIdentityProjection, Map, ServicePlan>
@@ -146,8 +146,7 @@ class PlansSync {
                 }
             }
             def updateResponse = morpheusContext.services.servicePlan.bulkSave(saves)
-            def servicePlans = updateResponse.persistedItems
-            syncPlanPrices(servicePlans)
+            syncPlanPrices(updateList.collect { it.existingItem })
         } catch(e) {
             log.error("updateMatchedPlans error: ${e}", e)
         }
@@ -192,9 +191,8 @@ class PlansSync {
 
             // Iterate the preconfigured plans
             servicePlans?.each { cloudPlan ->
-                def planName = cloudPlan.name
-                ServicePlan currentServicePlan = new ServicePlan(provisionType: upcloudProvisionType, externalId: planName, active: true)
-                if (currentServicePlan && currentServicePlan.internalId != 'custom') {
+                def planName = cloudPlan.externalId
+                if (cloudPlan.internalId != 'custom') {
                     def priceSetCode = "upcloud.plan.${planName}.${regionCode}".toString()
                     if(!priceSetCodes.contains(priceSetCode)) {
                         priceSetCodes << priceSetCode
@@ -232,29 +230,29 @@ class PlansSync {
             log.debug("Custom plan opts: ${customPlanOpts}")
             def customPlan = morpheusContext.async.servicePlan.find(
                     new DataQuery().withFilter("code",'upcloud.plan.Custom UpCloud')
-                    .withFilter("active", true)
+                            .withFilter("active", true)
             ).blockingGet()
             if(!customPlan){
                 def name = customPlanOpts.name
                 def servicePlan = new ServicePlan(
-                    code:"upcloud.plan.${customPlanOpts.name}",
-                    provisionType:upcloudProvisionType,
-                    description:name,
-                    name:name,
-                    editable:false,
-                    externalId:customPlanOpts.name,
-                    maxCores:customPlanOpts.core_number,
-                    maxMemory:customPlanOpts.memory_amount.toLong() * ComputeUtility.ONE_MEGABYTE,
-                    maxStorage:customPlanOpts.storage_size.toLong() * ComputeUtility.ONE_GIGABYTE,
-                    active: true,
-                    addVolumes:true,
-                    deletable: false,
-                    sortOrder: 131072l,
-                    customCores: true,
-                    customMaxStorage: true,
-                    customMaxMemory: true,
-                    customMaxDataStorage: true,
-                    internalId: 'custom'
+                        code:"upcloud.plan.${customPlanOpts.name}",
+                        provisionType:upcloudProvisionType,
+                        description:name,
+                        name:name,
+                        editable:false,
+                        externalId:customPlanOpts.name,
+                        maxCores:customPlanOpts.core_number,
+                        maxMemory:customPlanOpts.memory_amount.toLong() * ComputeUtility.ONE_MEGABYTE,
+                        maxStorage:customPlanOpts.storage_size.toLong() * ComputeUtility.ONE_GIGABYTE,
+                        active: true,
+                        addVolumes:true,
+                        deletable: false,
+                        sortOrder: 131072l,
+                        customCores: true,
+                        customMaxStorage: true,
+                        customMaxMemory: true,
+                        customMaxDataStorage: true,
+                        internalId: 'custom'
                 )
 
                 customPlan = morpheusContext.async.servicePlan.create(servicePlan).blockingGet()
@@ -331,7 +329,7 @@ class PlansSync {
         Boolean itemsCreated = morpheusContext.async.accountPrice.create(createList).blockingGet()
         if(itemsCreated) {
             List<String> priceSetCodes = createList.collect { it.code.replace("upcloud.price.", "upcloud.plan.") }
-            
+
             Map<String, AccountPriceSet> tmpPriceSets = morpheusContext.accountPriceSet.listByCode(priceSetCodes).toList().blockingGet().collectEntries { [(it.code): it] }
             morpheusContext.async.accountPrice.listByCode(createList.collect {it.code}).blockingSubscribe { AccountPrice price ->
                 def priceSetCode = price.code.replace("upcloud.price.", "upcloud.plan.")
@@ -497,7 +495,7 @@ class PlansSync {
                 type: AccountPriceSet.PRICE_SET_TYPE.component.toString(),
                 systemCreated: true
         )
-          priceSet = morpheusContext.async.accountPriceSet.create(priceSet).blockingGet()
+        priceSet = morpheusContext.async.accountPriceSet.create(priceSet).blockingGet()
 
         // Get or create the prices
         // First.. memory
@@ -570,11 +568,20 @@ class PlansSync {
     }
 
     static zoneList = [
-            [id:'de-fra1', name:'Frankfurt #1', available:true],
-            [id:'fi-hel1', name:'Helsinki #1', available:true],
-            [id:'nl-ams1', name:'Amsterdam #1', available:true],
-            [id:'sg-sin1', name:'Singapore #1', available:true],
-            [id:'uk-lon1', name:'London #1', available:true],
-            [id:'us-chi1', name:'Chicago #1', available:true]
+            [id:'au-syd1', name:'Sydney #1',     available:true],
+            [id:'de-fra1', name:'Frankfurt #1',  available:true],
+            [id:'dk-cph1', name:'Copenhagen #1', available:true],
+            [id:'es-mad1', name:'Madrid #1',     available:true],
+            [id:'fi-hel1', name:'Helsinki #1',   available:true],
+            [id:'fi-hel2', name:'Helsinki #2',   available:true],
+            [id:'nl-ams1', name:'Amsterdam #1',  available:true],
+            [id:'no-svg1', name:'Stavanger #1',  available:true],
+            [id:'pl-waw1', name:'Warsaw #1',     available:true],
+            [id:'se-sto1', name:'Stockholm #1',  available:true],
+            [id:'sg-sin1', name:'Singapore #1',  available:true],
+            [id:'uk-lon1', name:'London #1',     available:true],
+            [id:'us-chi1', name:'Chicago #1',    available:true],
+            [id:'us-nyc1', name:'New York #1',   available:true],
+            [id:'us-sjo1', name:'San Jose #1',   available:true],
     ]
 }

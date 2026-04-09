@@ -373,6 +373,8 @@ class UpcloudCloudProvider implements CloudProvider {
 					//def doInventory = cloudInfo.getConfigProperty('importExisting')
 					//def vmCacheOpts = [zone:zone, createNew:(inventoryLevel == 'basic' || inventoryLevel == 'full'), inventoryLevel:inventoryLevel]
 
+					cloudInfo = updateZoneRegionCode(cloudInfo)
+
 					(new UserImagesSync(client, cloudInfo, this.plugin, context)).execute()
 					(new VirtualMachinesSync(client, cloudInfo, this.plugin, context)).execute()
 
@@ -660,5 +662,15 @@ class UpcloudCloudProvider implements CloudProvider {
 
 	String getCloudInstanceTypeLayoutCode() {
 		return 'upcloud-1.0-single'
+	}
+
+	private updateZoneRegionCode(Cloud cloud) {
+		def regionCode = cloud.getConfigProperty('zone')
+		if(cloud.regionCode != regionCode) {
+			log.debug "Updating region code for ${cloud} to ${regionCode}"
+			cloud.regionCode = regionCode
+			return morpheus.services.cloud.save(cloud)
+		}
+		return cloud
 	}
 }
