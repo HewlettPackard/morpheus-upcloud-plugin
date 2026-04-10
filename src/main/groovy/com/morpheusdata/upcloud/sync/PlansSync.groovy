@@ -47,7 +47,6 @@ class PlansSync {
                         new DataQuery().withFilter("provisionType.code", 'upcloud')
                                 .withFilter('active', true)
                 )
-                println "\u001B[33mAC Log - PlansSync:execute- ${existingList.toList().blockingGet().collect {it.id}}\u001B[0m"
                 planList << getCustomServicePlan()
                 SyncTask<ServicePlanIdentityProjection, Map, ServicePlan> syncTask = new SyncTask<>(existingList, planList as Collection<Map>) as SyncTask<ServicePlanIdentityProjection, Map, ServicePlan>
                 syncTask.addMatchFunction { ServicePlanIdentityProjection morpheusItem, Map cloudItem ->
