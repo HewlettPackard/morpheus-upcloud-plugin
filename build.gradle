@@ -88,7 +88,7 @@ jar {
 				'Morpheus-Logo-Dark': 'assets/upcloud.svg',
 				'Morpheus-Labels': 'Plugin, Cloud',
 				'Morpheus-Repo': 'https://github.com/gomorpheus/morpheus-upcloud-plugin',
-				'Morpheus-Min-Appliance-Version': "7.0.4"
+				'Morpheus-Min-Appliance-Version': morpheusMinVersion
 		)
 	}
 }
