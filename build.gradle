@@ -2,10 +2,10 @@ buildscript {
     repositories {
         mavenLocal()
         mavenCentral()
-        maven { url "https://plugins.gradle.org/m2/" }
-        maven { url "https://nexus.bertramlabs.com/content/repositories/snapshots" }
-		maven { url "https://nexus.bertramlabs.com/content/repositories/releases" }
-		maven { url "https://nexus.bertramlabs.com/content/repositories/publicReleases" }
+        maven { url = "https://plugins.gradle.org/m2/" }
+        maven { url = "https://nexus.bertramlabs.com/content/repositories/snapshots" }
+		maven { url = "https://nexus.bertramlabs.com/content/repositories/releases" }
+		maven { url = "https://nexus.bertramlabs.com/content/repositories/publicReleases" }
     }
     dependencies {
         classpath "com.github.johnrengelman:shadow:8.1.1"
@@ -34,19 +34,24 @@ java {
 repositories {
 	mavenLocal()
 	mavenCentral()
-	maven { url "https://nexus.bertramlabs.com/content/repositories/snapshots" }
-	maven { url "https://nexus.bertramlabs.com/content/repositories/releases" }
-	maven { url "https://nexus.bertramlabs.com/content/repositories/publicReleases" }
+	maven { url = "https://nexus.bertramlabs.com/content/repositories/snapshots" }
+	maven { url = "https://nexus.bertramlabs.com/content/repositories/releases" }
+	maven { url = "https://nexus.bertramlabs.com/content/repositories/publicReleases" }
 }
 
 configurations {
 	provided
+    configureEach {
+		resolutionStrategy.capabilitiesResolution.all {
+			selectHighestVersion()
+		}
+	}
 }
 
 dependencies {
 	provided "com.morpheusdata:morpheus-plugin-api:$morpheusApiVersion"
 	
-	provided "org.codehaus.groovy:groovy-all:$groovyVersion"
+	provided "org.apache.groovy:groovy-all:$groovyVersion"
 	implementation 'commons-beanutils:commons-beanutils:1.9.3'
 	implementation "org.slf4j:slf4j-api:$slf4jVersion"
 	implementation "org.slf4j:slf4j-parent:$slf4jVersion"
@@ -58,7 +63,7 @@ dependencies {
 	testImplementation 'org.apache.httpcomponents:httpcore:4.4.5'
 	testImplementation "org.slf4j:slf4j-parent:$slf4jVersion"
 
-	testImplementation "org.codehaus.groovy:groovy-all:$groovyVersion"
+	testImplementation "org.apache.groovy:groovy-all:$groovyVersion"
 	testImplementation 'net.bytebuddy:byte-buddy:1.9.3'
 	testImplementation 'org.objenesis:objenesis:2.6'
 	testImplementation platform("org.spockframework:spock-bom:$spockVersion")
@@ -99,7 +104,7 @@ assets {
 
 
 task(console, dependsOn: 'classes', type: JavaExec) {
-	main = 'groovy.ui.Console'
+	mainClass = 'groovy.ui.Console'
 	classpath = sourceSets.main.compileClasspath + sourceSets.main.runtimeClasspath
 }
 

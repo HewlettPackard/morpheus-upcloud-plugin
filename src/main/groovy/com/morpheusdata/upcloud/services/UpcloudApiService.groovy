@@ -591,7 +591,7 @@ class UpcloudApiService {
         log.debug("got: ${results}")
         rtn.success = results?.success
         if(rtn.success == true) {
-            rtn.results = new groovy.json.JsonSlurper().parseText(results.content)
+            rtn.results = results.data
         }
         return rtn
     }
@@ -608,14 +608,14 @@ class UpcloudApiService {
         log.debug("got: ${results}")
         rtn.success = results?.success
         if(rtn.success == true) {
-            rtn.results = new groovy.json.JsonSlurper().parseText(results.content)
+            rtn.results = results.data
             log.debug("total ssh keys: ${rtn.results.meta.total}")
             def theresMore = rtn.results.links?.pages?.next ? true: false
             while (theresMore) {
                 pageNum++
                 query.page = "${pageNum}"
                 def moreResults = callApi(apiUrl, '/v2/account/keys', apiKey, [headers:headers, query:query, requestContentType:ContentType.JSON], Method.GET)
-                def r = new groovy.json.JsonSlurper().parseText(moreResults.content)
+                def r = moreResults.data
                 rtn.results.ssh_keys += r.ssh_keys
                 theresMore = r.links?.pages?.next ? true: false
             }
