@@ -55,15 +55,15 @@ UpCloud server backups are supported via the Morpheus backup framework. Supporte
 ## Repository structure
 
 - `src/main/groovy` - Source code for the plugin
-    - `UpcloudPlugin.groovy` - Plugin entry point; registers all providers and resolves API credentials
-    - `UpcloudCloudProvider.groovy` - Defines the UpCloud cloud/zone type, network types, storage volume types, and compute server types
-    - `UpcloudProvisionProvider.groovy` - Handles provisioning, resizing, starting/stopping, and removal of UpCloud servers
-    - `UpcloudOptionSourceProvider.groovy` - Supplies option lists (e.g. zones, plans) for Morpheus UI forms
-    - `UpcloudBackupProvider.groovy`, `UpcloudBackupExecutionProvider.groovy`, `UpcloudBackupRestoreProvider.groovy`, `UpcloudBackupTypeProvider.groovy` - Backup, backup execution, and restore support for UpCloud servers
-    - `datasets/` - Dataset providers (`UpcloudCloudRegionDatasetProvider`, `UpcloudImageDatasetProvider`) used to populate region and image selection lists
-    - `services/UpcloudApiService.groovy` - Wraps calls to the UpCloud REST API (zones, plans, templates, servers, storage)
-    - `sync/` - Synchronization tasks that keep Morpheus in sync with UpCloud (`PlansSync`, `PublicTemplatesSync`, `UserImagesSync`, `VirtualMachinesSync`)
-    - `util/` - Utility classes (`UpcloudComputeUtility`, `UpcloudStatusUtility`) used for API communication and server status handling
+  - `UpcloudPlugin.groovy` - Plugin entry point; registers all providers and resolves API credentials
+  - `UpcloudCloudProvider.groovy` - Defines the UpCloud cloud/zone type, network types, storage volume types, and compute server types
+  - `UpcloudProvisionProvider.groovy` - Handles provisioning, resizing, starting/stopping, and removal of UpCloud servers
+  - `UpcloudOptionSourceProvider.groovy` - Supplies option lists (e.g. zones, plans) for Morpheus UI forms
+  - `UpcloudBackupProvider.groovy`, `UpcloudBackupExecutionProvider.groovy`, `UpcloudBackupRestoreProvider.groovy`, `UpcloudBackupTypeProvider.groovy` - Backup, backup execution, and restore support for UpCloud servers
+  - `datasets/` - Dataset providers (`UpcloudCloudRegionDatasetProvider`, `UpcloudImageDatasetProvider`) used to populate region and image selection lists
+  - `services/UpcloudApiService.groovy` - Wraps calls to the UpCloud REST API (zones, plans, templates, servers, storage)
+  - `sync/` - Synchronization tasks that keep Morpheus in sync with UpCloud (`PlansSync`, `PublicTemplatesSync`, `UserImagesSync`, `VirtualMachinesSync`)
+  - `util/` - Utility classes (`UpcloudComputeUtility`, `UpcloudStatusUtility`) used for API communication and server status handling
 - `src/assets` - Plugin assets, including the UpCloud logo (`assets/upcloud.svg`) used in the Morpheus UI
 - `build.gradle` and `gradle.properties` - Build configuration and dependency/version properties for the plugin
 
@@ -116,10 +116,15 @@ The plugin communicates with the UpCloud REST API at `https://api.upcloud.com` (
 
 - `/zone` (GET) - List available UpCloud zones/regions
 - `/plan` (GET) - List available server plans
-- `/storage/template` (GET, POST) - List and manage public/private storage templates and images
+- `/price` (GET) - List pricing information for zones, plans, and resources
+- `/storage/template` (GET) - List public and private (user) storage templates/images
+- `/storage` (POST) - Create a new storage volume
+- `/storage/{storageId}` (GET, PUT, DELETE) - Retrieve, resize, or delete a specific storage volume
+- `/storage/{storageId}/backup` (POST) - Create a snapshot/backup of a storage volume
+- `/storage/{storageId}/restore` (POST) - Restore a storage volume from a snapshot/backup
 - `/server` (GET, POST) - List servers and create a new server
-- `/server/{serverId}` (GET, PUT, DELETE) - Retrieve, modify, or delete a specific server
+- `/server/{serverId}` (GET, PUT, DELETE) - Retrieve, resize/modify, or delete a specific server
 - `/server/{serverId}/start` (POST) - Start a server
-- `/server/{serverId}/stop` (POST) - Stop a server
+- `/server/{serverId}/stop` (POST) - Stop or power off a server
 - `/server/{serverId}/storage/attach` (POST) - Attach a storage volume to a server
 - `/server/{serverId}/storage/detach` (POST) - Detach a storage volume from a server
