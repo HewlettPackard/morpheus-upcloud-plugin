@@ -46,11 +46,15 @@ UpCloud server backups are supported via the Morpheus backup framework. Supporte
 - Execute backup jobs through Morpheus
 - Restore backups to existing workloads
 
+---
+
 ## Requirements
 
 | Component | Minimum Version |
 |-----------|----------------|
 | Morpheus | 8.1.2 |
+
+---
 
 ## Repository structure
 
@@ -66,6 +70,8 @@ UpCloud server backups are supported via the Morpheus backup framework. Supporte
   - `util/` - Utility classes (`UpcloudComputeUtility`, `UpcloudStatusUtility`) used for API communication and server status handling
 - `src/assets` - Plugin assets, including the UpCloud logo (`assets/upcloud.svg`) used in the Morpheus UI
 - `build.gradle` and `gradle.properties` - Build configuration and dependency/version properties for the plugin
+
+---
 
 ## Building the plugin
 
@@ -83,9 +89,13 @@ To execute tests, use the following command:
 ./gradlew test
 ```
 
+---
+
 ## License
 
 Copyright 2022 Morpheus Data, LLC. Licensed under the [Apache License, Version 2.0](LICENSE).
+
+---
 
 ## Installing
 
@@ -93,6 +103,8 @@ Copyright 2022 Morpheus Data, LLC. Licensed under the [Apache License, Version 2
 2. In Morpheus, navigate to **Administration → Integrations → Plugins**.
 3. Click **Browse** and upload the `.jar` file.
 4. The **UpCloud** cloud type will appear after the plugin loads.
+
+---
 
 ## Detailed Usage Step
 
