@@ -66,6 +66,7 @@ dependencies {
 	testImplementation "org.apache.groovy:groovy-all:$groovyVersion"
 	testImplementation 'net.bytebuddy:byte-buddy:1.9.3'
 	testImplementation 'org.objenesis:objenesis:2.6'
+	testImplementation 'cloud.wondrify:karman-core:2.5.2'
 	testImplementation platform("org.spockframework:spock-bom:$spockVersion")
 	testImplementation "org.spockframework:spock-core"
 	testImplementation "org.spockframework:spock-junit4"  // you can remove this if your code does not rely on old JUnit 4 rules
@@ -76,6 +77,10 @@ dependencies {
 sourceSets {
 	main {
 		compileClasspath += configurations.provided
+	}
+	test {
+		compileClasspath += configurations.provided
+		runtimeClasspath += configurations.provided
 	}
 }
 
@@ -109,6 +114,7 @@ task(console, dependsOn: 'classes', type: JavaExec) {
 }
 
 test {
+	useJUnitPlatform()
 	testLogging {
 		exceptionFormat = 'full'
 		showStandardStreams = true

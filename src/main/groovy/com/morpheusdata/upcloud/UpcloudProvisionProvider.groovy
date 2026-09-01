@@ -417,6 +417,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 				def rootVolume = server.volumes?.find{ it.rootVolume == true}
 				def dataDisks = server.volumes?.findAll{ it.rootVolume == false}?.sort{it.id}
 				def servicePlan = workload.instance.plan
+				if(!servicePlan || !server.plan) {
+					provisionResponse.setError('No service plan was specified for this server')
+					return new ServiceResponse(success: false, msg: 'No service plan was specified for this server', error: null, data: provisionResponse)
+				}
 				def maxMemory = server.maxMemory?.div(ComputeUtility.ONE_MEGABYTE)
 				def maxStorage = rootVolume?.getMaxStorage() ?: opts.config?.maxStorage ?: server.plan.maxStorage
 
@@ -1274,6 +1278,10 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 			Cloud cloud = server.cloud
 			Account account = server.account
 			ServicePlan plan = server.plan
+			if(!plan) {
+				provisionResponse.setError('No service plan was specified for this server')
+				return new ServiceResponse(success: false, msg: 'No service plan was specified for this server', error: null, data: provisionResponse)
+			}
 			def sizeRef = plan.externalId
 			config.sizeRef = sizeRef
 			def imageType = config.templateTypeSelect ?: 'default'
