@@ -417,12 +417,12 @@ class UpcloudProvisionProvider extends AbstractProvisionProvider implements VmPr
 				def rootVolume = server.volumes?.find{ it.rootVolume == true}
 				def dataDisks = server.volumes?.findAll{ it.rootVolume == false}?.sort{it.id}
 				def servicePlan = workload.instance.plan
-				if(!servicePlan || !server.plan) {
+				if(!servicePlan) {
 					provisionResponse.setError('No service plan was specified for this server')
 					return new ServiceResponse(success: false, msg: 'No service plan was specified for this server', error: null, data: provisionResponse)
 				}
 				def maxMemory = server.maxMemory?.div(ComputeUtility.ONE_MEGABYTE)
-				def maxStorage = rootVolume?.getMaxStorage() ?: opts.config?.maxStorage ?: server.plan.maxStorage
+				def maxStorage = rootVolume?.getMaxStorage() ?: opts.config?.maxStorage ?: server.plan?.maxStorage
 
 				def runConfig = [
 						containerId: workload.id,

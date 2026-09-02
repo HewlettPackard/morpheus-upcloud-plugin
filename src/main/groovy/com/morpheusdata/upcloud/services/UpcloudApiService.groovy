@@ -350,7 +350,8 @@ class UpcloudApiService {
             if(serverConfig.userData)
                 callOpts.body.server.user_data = serverConfig.userData
             //create server
-            log.debug("callOpts: ${callOpts}")
+            def logOpts = callOpts.body?.server?.user_data ? [body: [server: callOpts.body.server + [user_data: '[REDACTED]']]] : callOpts
+            log.debug("callOpts: ${logOpts}")
             def callResults = callApi(client, authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
