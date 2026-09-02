@@ -350,8 +350,7 @@ class UpcloudApiService {
             if(serverConfig.userData)
                 callOpts.body.server.user_data = serverConfig.userData
             //create server
-            def logOpts = callOpts.body?.server?.user_data ? [body: [server: callOpts.body.server + [user_data: '[REDACTED]']]] : callOpts
-            log.debug("callOpts: ${logOpts}")
+            log.debug("callOpts: ${redactUserData(callOpts)}")
             def callResults = callApi(client, authConfig, callPath, callOpts, 'POST')
             if(callResults.success == true) {
                 rtn.data = callResults.data
@@ -908,7 +907,7 @@ class UpcloudApiService {
         def apiVersion = authConfig.apiVersion ?: upcloudApiVersion
         def apiPath = "${apiVersion}${path}".toString()
         //log.info("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${JsonOutput.prettyPrint(JsonOutput.toJson(opts + [password: '*******']))}")
-        log.debug("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${opts}")
+        log.debug("calling to: ${apiUrl}; path: ${apiVersion}${path}, opts: ${redactUserData(opts)}")
 
         RequestOptions requestOptions = new RequestOptions(headers: [:])
         requestOptions.readTimeout = requestTimeout
@@ -931,5 +930,14 @@ class UpcloudApiService {
         requestOptions.headers['Content-Type'] = 'application/json'
         ServiceResponse response = client.callJsonApi(apiUrl, apiPath, username, password, requestOptions, method)
         return response
+    }
+
+    // Returns a copy of opts with any body.server.user_data replaced, since cloud-init user_data
+    // commonly carries secrets (passwords, tokens) that must not be written to logs.
+    private static Map redactUserData(Map opts) {
+        if(opts?.body?.server?.user_data) {
+            return opts + [body: opts.body + [server: opts.body.server + [user_data: '[REDACTED]']]]
+        }
+        return opts
     }
 }
