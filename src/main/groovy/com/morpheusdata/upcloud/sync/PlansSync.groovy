@@ -60,7 +60,6 @@ class PlansSync {
                 }.onDelete { removeItems ->
                     removeMissingPlans(removeItems)
                 }.start()
-
             } else {
                 log.error "Error in getting plans: ${planListResults}"
             }
@@ -174,9 +173,10 @@ class PlansSync {
         List<String> servicePlanCodes = servicePlans.collect { it.code }
         Map<String, ServicePlan> tmpServicePlanMap = morpheusContext.async.servicePlan.listByCode(servicePlanCodes).distinct { it.code }.toList().blockingGet().collectEntries { [(it.code):it]}
 
+        // per-zone loop only accumulates master lists; SyncTasks run once after in Phase 2.
         priceListResults?.data?.prices?.zone?.each { cloudPriceData ->
             def regionCode = cloudPriceData.name
-            def regionName = zoneList.find { it.id == regionCode }?.name
+            def regionName = zoneList.find { it.id == regionCode }?.name ?: regionCode
             AccountPrice storagePrice = new AccountPrice(
                     name         : "UpCloud - MaxIOPs - (${regionName})",
                     code         : "upcloud.price.storage_maxiops.${regionCode}",
@@ -259,86 +259,114 @@ class PlansSync {
 
 
             syncCustomPlan(customPlan, cloudPriceData, storagePrice)
+        }
 
-            // Account Price Set
-            Observable<AccountPriceSetIdentityProjection> existingPriceSets = morpheusContext.async.accountPriceSet.listSyncProjectionsByCode(priceSetCodes)
-            SyncTask<AccountPriceSetIdentityProjection, AccountPriceSet, AccountPriceSet> syncTask = new SyncTask(existingPriceSets, priceSets)
-            syncTask.addMatchFunction { AccountPriceSetIdentityProjection projection, AccountPriceSet cloudItem ->
-                return projection.code == cloudItem.code
-            }.onDelete { List<AccountPriceSetIdentityProjection> deleteList ->
-                def deleteIds = deleteList.collect { it.id }
-                List<ServicePlanPriceSet> servicePlanPriceSetDeleteList = morpheusContext.async.servicePlanPriceSet.listByAccountPriceSetIds(deleteIds).toList().blockingGet()
-                Boolean servicePlanPriceSetDeleteResult = morpheusContext.async.servicePlanPriceSet.bulkRemove(servicePlanPriceSetDeleteList).blockingGet()
-                if(servicePlanPriceSetDeleteResult) {
-                    morpheusContext.async.accountPriceSet.bulkRemove(deleteList).blockingGet()
-                } else {
-                    log.error("Failed to delete ServicePlanPriceSets associated to AccountPriceSet")
+        // Phase 2 — run SyncTasks once over the full cumulative list.
+        try {
+            runPriceSetAndPriceSyncTasks(priceSets, prices, priceSetCodes, priceSetPlans)
+        } catch(Throwable t) {
+        }
+    }
+
+    /**
+     * runs the price-set then price SyncTasks once over the cumulative list.
+     */
+    private runPriceSetAndPriceSyncTasks(List<AccountPriceSet> priceSets, List<AccountPrice> prices,
+                                         List<String> priceSetCodes, Map<String, ServicePlan> priceSetPlans) {
+        Observable<AccountPriceSetIdentityProjection> existingPriceSets = morpheusContext.async.accountPriceSet.listSyncProjectionsByCode(priceSetCodes)
+        SyncTask<AccountPriceSetIdentityProjection, AccountPriceSet, AccountPriceSet> syncTask = new SyncTask(existingPriceSets, priceSets)
+        syncTask.addMatchFunction { AccountPriceSetIdentityProjection projection, AccountPriceSet cloudItem ->
+            return projection.code == cloudItem.code
+        }.onDelete { List<AccountPriceSetIdentityProjection> deleteList ->
+            def deleteIds = deleteList.collect { it.id }
+            List<ServicePlanPriceSet> servicePlanPriceSetDeleteList = morpheusContext.async.servicePlanPriceSet.listByAccountPriceSetIds(deleteIds).toList().blockingGet()
+            Boolean servicePlanPriceSetDeleteResult = morpheusContext.async.servicePlanPriceSet.bulkRemove(servicePlanPriceSetDeleteList).blockingGet()
+            if(servicePlanPriceSetDeleteResult) {
+                morpheusContext.async.accountPriceSet.bulkRemove(deleteList).blockingGet()
+            } else {
+                log.error("Failed to delete ServicePlanPriceSets associated to AccountPriceSet")
+            }
+        }.onAdd { List<AccountPriceSet> createList ->
+            while (createList.size() > 0) {
+                List chunkedList = createList.take(50)
+                createList = createList.drop(50)
+                createPriceSets(chunkedList, priceSetPlans)
+            }
+        }.withLoadObjectDetails { List<SyncTask.UpdateItemDto<AccountPriceSetIdentityProjection, AccountPriceSet>> updateItems ->
+            Map<Long, SyncTask.UpdateItemDto<AccountPriceSetIdentityProjection, AccountPriceSet>> updateItemMap = updateItems.collectEntries { [(it.existingItem.id): it]}
+            morpheusContext.async.accountPriceSet.listById(updateItems.collect { it.existingItem.id } as Collection<Long>).map {AccountPriceSet priceSet ->
+                SyncTask.UpdateItemDto<AccountPriceSetIdentityProjection, AccountPriceSet> matchItem = updateItemMap[priceSet.id]
+                return new SyncTask.UpdateItem<AccountPriceSet,AccountPriceSet>(existingItem:priceSet, masterItem:matchItem.masterItem)
+            }
+        }.onUpdate { updateList ->
+            while (updateList.size() > 0) {
+                List chunkedList = updateList.take(50)
+                updateList = updateList.drop(50)
+                updateMatchedPriceSet(chunkedList, priceSetPlans)
+            }
+        }.observe().blockingSubscribe() { complete ->
+            if(complete) {
+                // query existing prices by price codes (upcloud.price.*), NOT price-set codes.
+                // The old code passed priceSetCodes, never matched any account_price rows, so onUpdate never fired.
+                // onDelete is structurally unreachable here because priceCodes == prices.collect{it.code}.
+                List<String> priceCodes = prices.collect { it.code }
+                if(!priceCodes) {
+                    return
                 }
-            }.onAdd { List<AccountPriceSet> createList ->
-                while (createList.size() > 0) {
-                    List chunkedList = createList.take(50)
-                    createList = createList.drop(50)
-                    createPriceSets(chunkedList, priceSetPlans)
-                }
-            }.withLoadObjectDetails { List<SyncTask.UpdateItemDto<AccountPriceSetIdentityProjection, AccountPriceSet>> updateItems ->
-                Map<Long, SyncTask.UpdateItemDto<AccountPriceSetIdentityProjection, AccountPriceSet>> updateItemMap = updateItems.collectEntries { [(it.existingItem.id): it]}
-                morpheusContext.async.accountPriceSet.listById(updateItems.collect { it.existingItem.id } as Collection<Long>).map {AccountPriceSet priceSet ->
-                    SyncTask.UpdateItemDto<AccountPriceSetIdentityProjection, AccountPriceSet> matchItem = updateItemMap[priceSet.id]
-                    return new SyncTask.UpdateItem<AccountPriceSet,AccountPriceSet>(existingItem:priceSet, masterItem:matchItem.masterItem)
-                }
-            }.onUpdate { updateList ->
-                while (updateList.size() > 0) {
-                    List chunkedList = updateList.take(50)
-                    updateList = updateList.drop(50)
-                    updateMatchedPriceSet(chunkedList, priceSetPlans)
-                }
-            }.observe().blockingSubscribe() { complete ->
-                if(complete) {
-                    Observable<AccountPriceIdentityProjection> existingPrices = morpheusContext.async.accountPrice.listSyncProjectionsByCode(priceSetCodes)
-                    SyncTask<AccountPriceIdentityProjection, AccountPrice, AccountPrice> priceSyncTask = new SyncTask(existingPrices, prices)
-                    priceSyncTask.addMatchFunction { AccountPriceIdentityProjection projection, AccountPrice apiItem ->
-                        projection.code == apiItem.code
-                    }.onDelete { List<AccountPriceIdentityProjection> deleteList ->
-                        morpheusContext.async.accountPrice.bulkRemove(deleteList).blockingGet()
-                    }.onAdd { createList ->
-                        while(createList.size() > 0) {
-                            List chunkedList = createList.take(50)
-                            createList = createList.drop(50)
-                            createPrice(chunkedList)
-                        }
-                    }.withLoadObjectDetails { List<SyncTask.UpdateItemDto<AccountPriceIdentityProjection, AccountPrice>> updateItems ->
-                        Map<Long, SyncTask.UpdateItemDto<AccountPriceIdentityProjection, AccountPrice>> updateItemMap = updateItems.collectEntries { [(it.existingItem.id): it] }
-                        morpheusContext.async.accountPrice.listById(updateItems.collect { it.existingItem.id } as Collection<Long>).map { AccountPrice price ->
-                            SyncTask.UpdateItemDto<AccountPriceIdentityProjection, AccountPrice> matchItem = updateItemMap[price.id]
-                            return new SyncTask.UpdateItem<AccountPrice, AccountPrice>(existingItem: price, masterItem: matchItem.masterItem)
-                        }
-                    }.onUpdate { updateList ->
-                        while (updateList.size() > 0) {
-                            List chunkedList = updateList.take(50)
-                            updateList = updateList.drop(50)
-                            updateMatchedPrice(chunkedList)
-                        }
-                    }.start()
-                }
+                Observable<AccountPriceIdentityProjection> existingPrices = morpheusContext.async.accountPrice.listSyncProjectionsByCode(priceCodes)
+                SyncTask<AccountPriceIdentityProjection, AccountPrice, AccountPrice> priceSyncTask = new SyncTask(existingPrices, prices)
+                priceSyncTask.addMatchFunction { AccountPriceIdentityProjection projection, AccountPrice apiItem ->
+                    projection.code == apiItem.code
+                }.onDelete { List<AccountPriceIdentityProjection> deleteList ->
+                    morpheusContext.async.accountPrice.bulkRemove(deleteList).blockingGet()
+                }.onAdd { createList ->
+                    while(createList.size() > 0) {
+                        List chunkedList = createList.take(50)
+                        createList = createList.drop(50)
+                        createPrice(chunkedList)
+                    }
+                }.withLoadObjectDetails { List<SyncTask.UpdateItemDto<AccountPriceIdentityProjection, AccountPrice>> updateItems ->
+                    Map<Long, SyncTask.UpdateItemDto<AccountPriceIdentityProjection, AccountPrice>> updateItemMap = updateItems.collectEntries { [(it.existingItem.id): it] }
+                    morpheusContext.async.accountPrice.listById(updateItems.collect { it.existingItem.id } as Collection<Long>).map { AccountPrice price ->
+                        SyncTask.UpdateItemDto<AccountPriceIdentityProjection, AccountPrice> matchItem = updateItemMap[price.id]
+                        return new SyncTask.UpdateItem<AccountPrice, AccountPrice>(existingItem: price, masterItem: matchItem.masterItem)
+                    }
+                }.onUpdate { updateList ->
+                    while (updateList.size() > 0) {
+                        List chunkedList = updateList.take(50)
+                        updateList = updateList.drop(50)
+                        updateMatchedPrice(chunkedList)
+                    }
+                }.start()
             }
         }
     }
 
     def createPrice(List<AccountPrice> createList) {
-        Boolean itemsCreated = morpheusContext.async.accountPrice.create(createList).blockingGet()
+        createList?.take(3)?.each { AccountPrice p ->
+        }
+        Boolean itemsCreated
+        try {
+            itemsCreated = morpheusContext.async.accountPrice.create(createList).blockingGet()
+        } catch(Throwable t) {
+            return  // early-exit: callers ignore the return value; skips the link-up step below
+        }
         if(itemsCreated) {
             List<String> priceSetCodes = createList.collect { it.code.replace("upcloud.price.", "upcloud.plan.") }
 
             Map<String, AccountPriceSet> tmpPriceSets = morpheusContext.accountPriceSet.listByCode(priceSetCodes).toList().blockingGet().collectEntries { [(it.code): it] }
+            int linkCount = 0
             morpheusContext.async.accountPrice.listByCode(createList.collect {it.code}).blockingSubscribe { AccountPrice price ->
                 def priceSetCode = price.code.replace("upcloud.price.", "upcloud.plan.")
                 AccountPriceSet priceSet = tmpPriceSets[priceSetCode]
                 if(priceSet) {
                     morpheusContext.async.accountPriceSet.addToPriceSet(priceSet, price).blockingGet()
+                    linkCount++
                 } else {
                     log.error("createPrice addToPriceSet: Could not find matching price set for code {}", price.code)
                 }
             }
+        } else {
         }
     }
 
@@ -388,8 +416,14 @@ class PlansSync {
             }
         }
 
+
         if(itemsToUpdate.size() > 0) {
-            Boolean itemsUpdated = morpheusContext.async.accountPrice.save(itemsToUpdate).blockingGet()
+            Boolean itemsUpdated
+            try {
+                itemsUpdated = morpheusContext.async.accountPrice.save(itemsToUpdate).blockingGet()
+            } catch(Throwable t) {
+                return  // early-exit: callers ignore the return value; skips the link refresh below
+            }
             if(itemsUpdated) {
                 List<String> priceSetCodes = itemsToUpdate.collect { it.code.replace("upcloud.price.", "upcloud.plan.") }
                 Map<String, AccountPriceSet> tmpPriceSets = morpheusContext.async.accountPriceSet.listByCode(priceSetCodes).toList().blockingGet().collectEntries { [(it.code): it] }
@@ -406,15 +440,22 @@ class PlansSync {
                         log.error("createPrice (update) addToPriceSet: Could not find matching price set for code {}", price.code)
                     }
                 }
+            } else {
             }
         }
     }
 
     def createPriceSets(List<AccountPriceSet> createList, Map<String, ServicePlan> priceSetPlans) {
-        Boolean priceSetsCreated = morpheusContext.async.accountPriceSet.create(createList).blockingGet()
+        Boolean priceSetsCreated
+        try {
+            priceSetsCreated = morpheusContext.async.accountPriceSet.create(createList).blockingGet()
+        } catch(Throwable t) {
+            return  // early-exit: callers ignore the return value; this just skips the link-up step below
+        }
         if(priceSetsCreated) {
             List<AccountPriceSet> tmpPriceSets = morpheusContext.async.accountPriceSet.listByCode(createList.collect { it.code }).distinct{it.code }.toList().blockingGet()
             syncServicePlanPriceSets(tmpPriceSets, priceSetPlans)
+        } else {
         }
     }
 
@@ -477,68 +518,157 @@ class PlansSync {
         }.start()
     }
 
+    /**
+     * Idempotent cleanup of duplicate Custom UpCloud AccountPriceSet rows and stale ServicePlanPriceSet links.
+     * Lowest-id row wins as canonical; no-op when already converged.
+     */
+    private cleanupDuplicateCustomPriceSets(String priceSetCode, ServicePlan customPlan) {
+        // one-shot historical-data repair (TODO: drop after 2 release cycles confirm convergence).
+        // Synchronized per-code to serialize concurrent refreshes in this JVM (multi-JVM clusters still race but bulkRemove is idempotent).
+        synchronized(("morph-11511-cleanup:" + priceSetCode).intern()) {
+            try {
+                List<AccountPriceSet> allSets = morpheusContext.async.accountPriceSet
+                        .listByCode([priceSetCode]).toList().blockingGet() ?: []
+                if(allSets.size() <= 1) {
+                    return  // steady state
+                }
+
+            // Lowest id wins (oldest row). toSorted+first is unambiguous vs allSets.min{it.id}.
+            AccountPriceSet canonical = allSets.toSorted { it.id }.first()
+            List<AccountPriceSet> duplicates = allSets.findAll { it.id != canonical.id }
+
+            // Step 1: drop SPPS links pointing at dup sets (canonical gets its own link via syncCustomPlan).
+            List<Long> duplicateSetIds = duplicates.collect { it.id }
+            List<ServicePlanPriceSetIdentityProjection> linksToDupSets =
+                    morpheusContext.async.servicePlanPriceSet
+                            .listByAccountPriceSetIds(duplicateSetIds)
+                            .toList().blockingGet()
+                            ?.collect { new ServicePlanPriceSetIdentityProjection(id: it.id) } ?: []
+            if(linksToDupSets) {
+                morpheusContext.async.servicePlanPriceSet.bulkRemove(linksToDupSets).blockingGet()
+            }
+
+            // Step 2: dedupe SPPS links on (canonical, customPlan); keep lowest id.
+            List<ServicePlanPriceSet> canonicalLinks = morpheusContext.async.servicePlanPriceSet
+                    .listByAccountPriceSetIds([canonical.id])
+                    .filter { it.servicePlan?.id == customPlan.id }
+                    .toList().blockingGet() ?: []
+            if(canonicalLinks.size() > 1) {
+                Long keepLinkId = canonicalLinks.collect { it.id }.min()
+                List<ServicePlanPriceSetIdentityProjection> linksToRemove = canonicalLinks
+                        .findAll { it.id != keepLinkId }
+                        .collect { new ServicePlanPriceSetIdentityProjection(id: it.id) }
+                morpheusContext.async.servicePlanPriceSet.bulkRemove(linksToRemove).blockingGet()
+            }
+
+            // Step 3: remove the dup AccountPriceSet rows (server cascades account_price_set_price).
+            List<AccountPriceSetIdentityProjection> dupProjections = duplicates.collect {
+                new AccountPriceSetIdentityProjection(id: it.id, code: it.code)
+            }
+            morpheusContext.async.accountPriceSet.bulkRemove(dupProjections).blockingGet()
+
+        } catch(Throwable t) {
+            // never abort sync on cleanup failure
+        }
+        }  // end synchronized
+    }
+
+    /**
+     * Idempotent get-or-create + link for a single AccountPrice.
+     * priceManagerService.getOrCreatePrice handles history-aware cost propagation server-side.
+     * @return true on success; false on error (caller surfaces partial-link state via WARN)
+     */
+    private boolean upsertCustomComponentPrice(AccountPriceSet priceSet, AccountPrice price) {
+        try {
+            // getOrCreatePrice on async.* is synchronous and returns AccountPrice directly (not Single). No .blockingGet().
+            AccountPrice resolved = morpheusContext.async.accountPriceSet.getOrCreatePrice(price)
+            if(!resolved) {
+                return false
+            }
+            morpheusContext.async.accountPriceSet.addToPriceSet(priceSet, resolved).blockingGet()
+            return true
+        } catch(Throwable t) {
+            return false
+        }
+    }
+
     private syncCustomPlan(ServicePlan customPlan, cloudPriceData, AccountPrice storagePrice) {
         def planName = customPlan.name
         def regionCode = cloudPriceData.name
-        def regionName = zoneList.find { it.id == regionCode}?.name
+        // fall back to regionCode if zone isn't in the hard-coded zoneList (avoids "(null)" names).
+        def regionName = zoneList.find { it.id == regionCode}?.name ?: regionCode
         def HOURS_PER_MONTH = 24 * 30
 
-        // Get or create the price set
+        // pre-clean historical duplicates before the get-or-create below.
         def priceSetCode = "upcloud.plan.${planName}.${regionCode}"
-        def name = "${planName} (${regionName})"
-        def priceSet = new AccountPriceSet(
-                code: priceSetCode,
-                regionCode: regionCode,
-                name: name,
-                priceUnit: 'month',
-                type: AccountPriceSet.PRICE_SET_TYPE.component.toString(),
-                systemCreated: true
-        )
-        priceSet = morpheusContext.async.accountPriceSet.create(priceSet).blockingGet()
+        cleanupDuplicateCustomPriceSets(priceSetCode, customPlan)
 
-        // Get or create the prices
+        // get-or-create instead of unconditional create. Race window accepted; next refresh's cleanup converges.
+        def name = "${planName} (${regionName})"
+        // Sorted+first matches the canonical-selection rule in cleanupDuplicateCustomPriceSets.
+        def existingPriceSet = morpheusContext.async.accountPriceSet.listByCode([priceSetCode])
+                .toList().blockingGet()
+                ?.toSorted { it.id }
+                ?.find()
+        def priceSet
+        if(existingPriceSet) {
+            priceSet = existingPriceSet
+        } else {
+            priceSet = new AccountPriceSet(
+                    code: priceSetCode,
+                    regionCode: regionCode,
+                    name: name,
+                    priceUnit: 'month',
+                    type: AccountPriceSet.PRICE_SET_TYPE.component.toString(),
+                    systemCreated: true
+            )
+            priceSet = morpheusContext.async.accountPriceSet.create(priceSet).blockingGet()
+        }
+
+        if(!priceSet) {
+            return
+        }
+
+        // track per-component success so partial linkage is loudly surfaced via WARN below.
+        List<String> failedComponents = []
+
         // First.. memory
-        def priceCode = "upcloud.price.${planName}.${regionCode}.memory"
         def cloudPricePerHour =  new BigDecimal(cloudPriceData["server_memory"]?.price?.toString() ?: '0.0') / 100.0
         def cloudPricePerUnitMB = new BigDecimal(cloudPriceData["server_memory"]?.amount?.toString() ?: '256')
         def cloudPricePerMB = (cloudPricePerHour / cloudPricePerUnitMB ) * HOURS_PER_MONTH
-        def memoryPrice = new AccountPrice(
+        if(!upsertCustomComponentPrice(priceSet, new AccountPrice(
                 name: "UpCloud - Custom Memory (${regionName})",
-                code: priceCode,
+                code: "upcloud.price.${planName}.${regionCode}.memory",
                 priceType: AccountPrice.PRICE_TYPE.memory,
                 systemCreated: true,
                 cost: cloudPricePerMB,
                 priceUnit: 'month'
-        )
-        morpheusContext.async.accountPriceSet.addToPriceSet(priceSet, memoryPrice).blockingGet()
+        ))) { failedComponents << 'memory' }
 
         // Next.. core
-        priceCode = "upcloud.price.${planName}.${regionCode}.core"
+        // upsertCustomComponentPrice forces .blockingGet() (old code's core/cpu calls were fire-and-forget).
         def cloudPricePerCore =  (new BigDecimal(cloudPriceData["server_core"]?.price?.toString() ?: '0.0') / 100.0) * HOURS_PER_MONTH
-        def corePrice = new AccountPrice(
+        if(!upsertCustomComponentPrice(priceSet, new AccountPrice(
                 name: "UpCloud - Custom Core (${regionName})",
-                code: priceCode,
+                code: "upcloud.price.${planName}.${regionCode}.core",
                 priceType: AccountPrice.PRICE_TYPE.cores,
                 systemCreated: true,
                 cost: cloudPricePerCore,
                 priceUnit: 'month'
-        )
-        morpheusContext.async.accountPriceSet.addToPriceSet(priceSet, corePrice)
+        ))) { failedComponents << 'core' }
 
         // Next... stub out a default one for cpu
-        priceCode = "upcloud.price.${planName}.${regionCode}.cpu"
-        def cpuPrice = new AccountPrice(
+        if(!upsertCustomComponentPrice(priceSet, new AccountPrice(
                 name: "UpCloud - Custom Cpu (${regionName})",
-                code: priceCode,
+                code: "upcloud.price.${planName}.${regionCode}.cpu",
                 priceType: AccountPrice.PRICE_TYPE.cpu,
                 systemCreated: true,
                 cost: new BigDecimal('0.0'),
                 priceUnit: 'month'
-        )
-        morpheusContext.async.accountPriceSet.addToPriceSet(priceSet, cpuPrice)
+        ))) { failedComponents << 'cpu' }
 
         // Add the storage price
-        def storageMonthPrice = new AccountPrice(
+        if(!upsertCustomComponentPrice(priceSet, new AccountPrice(
                 name: "UpCloud - MaxIOPs - (${regionName})",
                 code: "upcloud.price.storage_maxiops.month.${regionCode}",
                 priceType: AccountPrice.PRICE_TYPE.storage,
@@ -547,12 +677,21 @@ class PlansSync {
                 incurCharges: 'always',
                 cost: new BigDecimal(((storagePrice?.cost ?: '0.0') * HOURS_PER_MONTH).toString()),
                 priceUnit: 'month'
-        )
-        morpheusContext.async.accountPriceSet.addToPriceSet(priceSet, storageMonthPrice)
+        ))) { failedComponents << 'storage' }
 
-        // Add the set to the correct service plan
-        def spps = new ServicePlanPriceSet(servicePlan: customPlan, priceSet: priceSet)
-        morpheusContext.async.servicePlanPriceSet.create(spps).blockingGet()
+        // WARN on partial component linkage (costing will be wrong until next refresh resolves).
+        if(failedComponents) {
+        }
+
+        // get-or-create SPPS link. servicePlan.id is safe (eager projection, not lazy). Same race accepted.
+        def existingLink = morpheusContext.async.servicePlanPriceSet.listIdentityProjections(priceSet)
+                .filter { it.servicePlan?.id == customPlan.id }
+                .firstElement().blockingGet()
+        if(existingLink) {
+        } else {
+            def spps = new ServicePlanPriceSet(servicePlan: customPlan, priceSet: priceSet)
+            morpheusContext.async.servicePlanPriceSet.create([spps]).blockingGet()
+        }
     }
 
     private static getCustomServicePlan() {
